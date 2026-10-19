@@ -1,6 +1,6 @@
 post_install() {
-  echo ">> Rtube telepítve. Indítás: rtube  (Winamp kinézet: rtube --winamp)"
-  echo ">> DMS sáv widget (opcionális):"
+  echo ">> Rtube installed / telepítve. Run: rtube   (Winamp skin: rtube --winamp)"
+  echo ">> DMS bar widget (optional / opcionális):"
   echo "   mkdir -p ~/.config/DankMaterialShell/plugins && cp -r /usr/share/rtube/dms-plugin ~/.config/DankMaterialShell/plugins/rtube"
 }
 post_upgrade() { post_install; }

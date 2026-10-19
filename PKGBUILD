@@ -1,15 +1,15 @@
 pkgname=rtube
 pkgver=1.2.0
 pkgrel=1
-pkgdesc="YouTube kereső és hanglejátszó GTK4-ben, üveges és Winamp kinézettel"
+pkgdesc="YouTube audio-only search and player (GTK4) with glass and Winamp skins"
 arch=('any')
 url="https://github.com/Mrkovi08/rtube"
 license=('custom')
 depends=('python' 'python-gobject' 'gtk4' 'gdk-pixbuf2' 'pango'
          'gstreamer' 'gst-plugins-base' 'gst-plugins-good' 'gst-libav' 'yt-dlp')
-optdepends=('mpv: videó megnyitása a 🎬 gombbal'
-            'cava: spektrumkijelző a lejátszóban'
-            'dms-shell: sáv widget a DankMaterialShellhez')
+optdepends=('mpv: open the video (🎬 button)'
+            'cava: spectrum visualizer in the player'
+            'dms-shell: DankMaterialShell bar widget')
 install=rtube.install
 source=('rtube.py' 'rtube.sh' 'rtube.desktop' 'rtube-winamp.desktop'
         'dms-plugin.json' 'dms-Widget.qml' 'skull.svg')
