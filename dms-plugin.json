@@ -1,0 +1,15 @@
+{
+  "id": "rtube",
+  "name": "Rtube",
+  "description": "YouTube hang lejátszó a sávról.",
+  "version": "1.1.0",
+  "author": "local",
+  "type": "widget",
+  "capabilities": [
+    "dankbar-widget"
+  ],
+  "component": "./Widget.qml",
+  "icon": "graphic_eq",
+  "requires_dms": ">=1.6.0",
+  "permissions": []
+}

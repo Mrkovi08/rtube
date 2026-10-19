@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Rtube
+GenericName=YouTube hang
+Comment=YouTube kereső, csak a hangot játssza
+Exec=rtube
+Icon=multimedia-player
+Terminal=false
+Categories=Audio;Music;Player;
+Keywords=youtube;zene;hang;music;rtube;
+StartupWMClass=io.github.rtube.Rtube
