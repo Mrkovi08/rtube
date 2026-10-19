@@ -7,7 +7,8 @@
 YouTube search that plays audio only. A GTK4 app for Arch Linux with a
 frosted-glass look and a classic Winamp skin, plus a small cava spectrum visualizer.
 
-> The app's interface is in Hungarian.
+> The app follows the system language (Hungarian or English). Force it with
+> `RTUBE_LANG=en` or `RTUBE_LANG=hu`, e.g. `RTUBE_LANG=en rtube`.
 
 ### Install
 
@@ -20,7 +21,7 @@ makepkg -si
 Or download the ready-made package from the [Releases](https://github.com/Mrkovi08/rtube/releases) page and run:
 
 ```sh
-sudo pacman -U rtube-1.2.0-1-any.pkg.tar.zst
+sudo pacman -U rtube-1.3.0-1-any.pkg.tar.zst
 ```
 
 pacman installs the required dependencies automatically (GTK4, GStreamer, yt-dlp...).
@@ -55,6 +56,9 @@ sudo pacman -R rtube
 YouTube kereső, ami csak a hangot játssza. GTK4 alkalmazás Arch Linuxra,
 üveges és klasszikus Winamp kinézettel, kis cava spektrumkijelzővel.
 
+> Az alkalmazás a rendszer nyelvét követi (magyar vagy angol). Kényszeríteni a
+> `RTUBE_LANG=en` vagy `RTUBE_LANG=hu` változóval lehet, pl. `RTUBE_LANG=hu rtube`.
+
 #### Telepítés
 
 ```sh
@@ -66,7 +70,7 @@ makepkg -si
 Vagy töltsd le a kész csomagot a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról, és:
 
 ```sh
-sudo pacman -U rtube-1.2.0-1-any.pkg.tar.zst
+sudo pacman -U rtube-1.3.0-1-any.pkg.tar.zst
 ```
 
 A pacman magától felrakja a szükséges függőségeket (GTK4, GStreamer, yt-dlp...).

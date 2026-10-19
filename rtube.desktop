@@ -1,11 +1,15 @@
 [Desktop Entry]
 Type=Application
 Name=Rtube
-GenericName=YouTube hang
-Comment=YouTube kereső, csak a hangot játssza
+Name[hu]=Rtube
+GenericName=YouTube audio
+GenericName[hu]=YouTube hang
+Comment=YouTube search that plays audio only
+Comment[hu]=YouTube kereső, csak a hangot játssza
 Exec=rtube
 Icon=multimedia-player
 Terminal=false
 Categories=Audio;Music;Player;
-Keywords=youtube;zene;hang;music;rtube;
+Keywords=youtube;music;audio;rtube;
+Keywords[hu]=youtube;zene;hang;music;rtube;
 StartupWMClass=io.github.rtube.Rtube

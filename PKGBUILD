@@ -1,5 +1,5 @@
 pkgname=rtube
-pkgver=1.2.0
+pkgver=1.3.0
 pkgrel=1
 pkgdesc="YouTube audio-only search and player (GTK4) with glass and Winamp skins"
 arch=('any')

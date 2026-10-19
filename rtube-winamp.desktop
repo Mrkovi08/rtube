@@ -1,11 +1,15 @@
 [Desktop Entry]
 Type=Application
 Name=Rtube (Winamp)
-GenericName=YouTube hang
-Comment=Rtube klasszikus Winamp kinézettel
+Name[hu]=Rtube (Winamp)
+GenericName=YouTube audio
+GenericName[hu]=YouTube hang
+Comment=Rtube with the classic Winamp look
+Comment[hu]=Rtube klasszikus Winamp kinézettel
 Exec=rtube --winamp
 Icon=multimedia-player
 Terminal=false
 Categories=Audio;Music;Player;
-Keywords=youtube;zene;winamp;rtube;
+Keywords=youtube;music;winamp;rtube;
+Keywords[hu]=youtube;zene;winamp;rtube;
 StartupWMClass=io.github.rtube.Rtube

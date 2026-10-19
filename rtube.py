@@ -37,6 +37,78 @@ AUDIO_FORMAT = (
 UA = "Mozilla/5.0"
 
 
+# ---- NYELV (magyar / angol) ----
+def detect_lang():
+    """RTUBE_LANG=hu|en felülír; különben a rendszer nyelve (LC_ALL, LC_MESSAGES, LANG)."""
+    forced = os.environ.get("RTUBE_LANG", "").strip().lower()
+    if forced.startswith("hu"):
+        return "hu"
+    if forced.startswith("en"):
+        return "en"
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        value = os.environ.get(var, "").strip()
+        if value:
+            return "hu" if value.lower().startswith("hu") else "en"
+    return "en"
+
+
+LANG = detect_lang()
+
+# Magyar (eredeti) szöveg -> angol fordítás
+EN = {
+    # Kezelőfelület
+    "YouTube keresés…": "Search YouTube…",
+    "Keresés": "Search",
+    "Kedvencek": "Favorites",
+    "Keress egy számra, vagy nyisd meg a kedvenceket.": "Search for a song, or open your favorites.",
+    "Keress egy számra.": "Search for a song.",
+    "Nincs lejátszás": "Nothing playing",
+    "Válassz egy számot": "Pick a song",
+    "Hangerő": "Volume",
+    "Megnyitás videóként (mpv)": "Open as video (mpv)",
+    "Még nincs kedvenc. A szív menti a számot.": "No favorites yet. Tap the heart to save a song.",
+    # Állapotüzenetek
+    "Keresés…": "Searching…",
+    "Nincs találat.": "No results.",
+    "{n} találat": "{n} results",
+    "A keresés nem sikerült.": "Search failed.",
+    "A találatokat nem sikerült olvasni.": "Couldn't read the search results.",
+    "Hiányzik a yt-dlp.": "yt-dlp is missing.",
+    "Hangfolyam betöltése…": "Loading audio stream…",
+    "Nincs hangfolyam.": "No audio stream.",
+    "Szól": "Playing",
+    "Szünet": "Paused",
+    "Vége": "Finished",
+    "Pufferelés {percent}%": "Buffering {percent}%",
+    "Lejátszás sikertelen.": "Playback failed.",
+    "mpv indítása...": "Starting mpv...",
+    "mpv elindítva.": "mpv started.",
+    "Hiba: Az mpv nincs telepítve.": "Error: mpv is not installed.",
+    # Hibaüzenetek
+    "Ehhez a videóhoz nincs lejátszható hang.": "No playable audio for this video.",
+    "A videó nem elérhető.": "The video is unavailable.",
+    "Lejárt a várakozás.": "Timed out.",
+    "Ismeretlen hiba.": "Unknown error.",
+    "hiba": "error",
+    "A GStreamer playbin nem elérhető.": "GStreamer playbin is not available.",
+}
+
+
+def tr(text, lang=None, **kwargs):
+    """Fordítás: magyar nyelvnél az eredeti szöveg, különben az angol."""
+    lang = lang or LANG
+    out = text if lang == "hu" else EN.get(text, text)
+    if kwargs:
+        if lang != "hu" and text == "{n} találat" and kwargs.get("n") == 1:
+            out = "1 result"
+        out = out.format(**kwargs)
+    return out
+
+
+# Belső jelzés időtúllépésre (friendly_error fordítja le)
+TIMEOUT_MSG = "Lejárt a várakozás."
+
+
 def rgba(hex_color, alpha):
     h = hex_color.lstrip("#")[:6]
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -352,7 +424,7 @@ def run_cmd(cmd, timeout, holder, key, lock):
     except subprocess.TimeoutExpired:
         stop_proc(proc)
         out, err = proc.communicate()
-        return "", "Lejárt a várakozás.", -1
+        return "", TIMEOUT_MSG, -1
     return out or "", err or "", proc.returncode
 
 
@@ -393,12 +465,12 @@ def friendly_error(err):
     text = (err or "").strip()
     low = text.lower()
     if "not available" in low or "requested format" in low:
-        return "Ehhez a videóhoz nincs lejátszható hang."
+        return tr("Ehhez a videóhoz nincs lejátszható hang.")
     if "unavailable" in low or "private" in low:
-        return "A videó nem elérhető."
-    if "lejárt" in low:
-        return "Lejárt a várakozás."
-    line = text.splitlines()[-1] if text else "Ismeretlen hiba."
+        return tr("A videó nem elérhető.")
+    if TIMEOUT_MSG.lower() in low or "lejárt" in low:
+        return tr(TIMEOUT_MSG)
+    line = text.splitlines()[-1] if text else tr("Ismeretlen hiba.")
     return line[:160]
 
 
@@ -469,7 +541,7 @@ class Player:
         self.phase = "idle"
         self.playbin = Gst.ElementFactory.make("playbin", "rtube")
         if self.playbin is None:
-            raise RuntimeError("A GStreamer playbin nem elérhető.")
+            raise RuntimeError(tr("A GStreamer playbin nem elérhető."))
         video_sink = Gst.ElementFactory.make("fakesink", "vsink")
         if video_sink is not None:
             video_sink.set_property("sync", False)
@@ -524,7 +596,7 @@ class Player:
             err, _dbg = msg.parse_error()
             self.playbin.set_state(Gst.State.NULL)
             self.phase = "idle"
-            self.on_error(err.message if err else "hiba")
+            self.on_error(err.message if err else tr("hiba"))
         elif kind == Gst.MessageType.EOS:
             self.phase = "ended"
             self.on_eos()
@@ -709,22 +781,22 @@ class Rtube(Gtk.Application):
         brand.add_css_class("brand")
         brand.set_valign(Gtk.Align.CENTER)
         self.entry = Gtk.Entry()
-        self.entry.set_placeholder_text("YouTube keresés…")
+        self.entry.set_placeholder_text(tr("YouTube keresés…"))
         self.entry.add_css_class("search")
         self.entry.set_hexpand(True)
         self.entry.connect("activate", self.search_now)
         self.entry.connect("changed", self.search_later)
-        search_btn = Gtk.Button(label="Keresés")
+        search_btn = Gtk.Button(label=tr("Keresés"))
         search_btn.add_css_class("accent")
         search_btn.connect("clicked", self.search_now)
-        self.fav_btn = Gtk.Button(label="Kedvencek")
+        self.fav_btn = Gtk.Button(label=tr("Kedvencek"))
         self.fav_btn.connect("clicked", self.on_favs)
         top.append(brand)
         top.append(self.entry)
         top.append(search_btn)
         top.append(self.fav_btn)
 
-        self.status = Gtk.Label(label="Keress egy számra, vagy nyisd meg a kedvenceket.", xalign=0)
+        self.status = Gtk.Label(label=tr("Keress egy számra, vagy nyisd meg a kedvenceket."), xalign=0)
         self.status.add_css_class("dim")
         self.status.set_ellipsize(Pango.EllipsizeMode.END)
 
@@ -736,7 +808,7 @@ class Rtube(Gtk.Application):
         self.list.connect("row-activated", self.on_row)
         scroll = BoundScroll()
         scroll.set_child(self.list)
-        self.empty = Gtk.Label(label="Keress egy számra.")
+        self.empty = Gtk.Label(label=tr("Keress egy számra."))
         self.empty.add_css_class("dim")
         self.empty.set_wrap(True)
         self.empty.set_vexpand(True)
@@ -755,11 +827,11 @@ class Rtube(Gtk.Application):
         meta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         meta.set_hexpand(True)
         meta.set_valign(Gtk.Align.CENTER)
-        self.np_title = Gtk.Label(label="Nincs lejátszás", xalign=0)
+        self.np_title = Gtk.Label(label=tr("Nincs lejátszás"), xalign=0)
         self.np_title.add_css_class("title")
         self.np_title.set_hexpand(True)
         self.np_title.set_ellipsize(Pango.EllipsizeMode.END)
-        self.np_sub = Gtk.Label(label="Válassz egy számot", xalign=0)
+        self.np_sub = Gtk.Label(label=tr("Válassz egy számot"), xalign=0)
         self.np_sub.add_css_class("dim")
         self.np_sub.set_hexpand(True)
         self.np_sub.set_ellipsize(Pango.EllipsizeMode.END)
@@ -767,7 +839,7 @@ class Rtube(Gtk.Application):
         meta.append(self.np_sub)
         self.vol = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
         self.vol.set_draw_value(False)
-        self.vol.set_tooltip_text("Hangerő")
+        self.vol.set_tooltip_text(tr("Hangerő"))
         self.vol.set_size_request(120, -1)
         self.vol.set_valign(Gtk.Align.CENTER)
         self._ui = True
@@ -778,7 +850,7 @@ class Rtube(Gtk.Application):
         # ---- MPV GOMB HOZZÁADÁSA ----
         self.video_btn = Gtk.Button(label="🎬")
         self.video_btn.add_css_class("icon-btn")
-        self.video_btn.set_tooltip_text("Megnyitás videóként (mpv)")
+        self.video_btn.set_tooltip_text(tr("Megnyitás videóként (mpv)"))
         self.video_btn.set_valign(Gtk.Align.CENTER)
         self.video_btn.set_sensitive(False)
         self.video_btn.connect("clicked", self.on_video)
@@ -871,13 +943,13 @@ class Rtube(Gtk.Application):
         if len(query) < 2:
             return False
         if not ytdlp_bin().is_file():
-            self.set_status("Hiányzik a yt-dlp.")
+            self.set_status(tr("Hiányzik a yt-dlp."))
             return False
         self.mode = "results"
         self.fav_btn.remove_css_class("active-view")
         self.gen += 1
         gen = self.gen
-        self.set_status("Keresés…")
+        self.set_status(tr("Keresés…"))
         self.pool.submit(self._search_worker, query, gen)
         return False
 
@@ -901,7 +973,7 @@ class Rtube(Gtk.Application):
             try:
                 tracks = parse_tracks(json.loads(out))
             except json.JSONDecodeError:
-                message = "A találatokat nem sikerült olvasni."
+                message = tr("A találatokat nem sikerült olvasni.")
         elif code is not None and code < 0 and not (err or "").strip():
             return
         else:
@@ -913,22 +985,22 @@ class Rtube(Gtk.Application):
             return False
         self.last_results = tracks
         if message and not tracks:
-            self.render(tracks, "A keresés nem sikerült.")
+            self.render(tracks, tr("A keresés nem sikerült."))
             self.set_status(message)
         else:
-            self.render(tracks, "Nincs találat.")
-            self.set_status("Nincs találat." if not tracks else f"{len(tracks)} találat")
+            self.render(tracks, tr("Nincs találat."))
+            self.set_status(tr("Nincs találat.") if not tracks else tr("{n} találat", n=len(tracks)))
         return False
 
     def on_favs(self, *_args):
         if self.mode == "favs":
             self.mode = "results"
             self.fav_btn.remove_css_class("active-view")
-            self.render(self.last_results, "Keress egy számra.")
+            self.render(self.last_results, tr("Keress egy számra."))
             return
         self.mode = "favs"
         self.fav_btn.add_css_class("active-view")
-        self.render(self.fav_items, "Még nincs kedvenc. A szív menti a számot.")
+        self.render(self.fav_items, tr("Még nincs kedvenc. A szív menti a számot."))
 
     def render(self, tracks, empty_text):
         while (row := self.list.get_row_at_index(0)) is not None:
@@ -1004,7 +1076,7 @@ class Rtube(Gtk.Application):
 
     def play(self, track):
         if not ytdlp_bin().is_file():
-            self.set_status("Hiányzik a yt-dlp.")
+            self.set_status(tr("Hiányzik a yt-dlp."))
             return
         self.current = {
             "id": track["id"],
@@ -1021,7 +1093,7 @@ class Rtube(Gtk.Application):
         self.queue_thumb(self.current, self.np_pic)
         self.sync_hearts()
         self.mark_playing()
-        self.set_status("Hangfolyam betöltése…")
+        self.set_status(tr("Hangfolyam betöltése…"))
         self._ui = True
         self.scale.set_range(0, 1)
         self.scale.set_value(0)
@@ -1058,7 +1130,7 @@ class Rtube(Gtk.Application):
         if self.closing or gen != self.play_gen:
             return False
         if message or not url:
-            self.set_status(message or "Nincs hangfolyam.")
+            self.set_status(message or tr("Nincs hangfolyam."))
             return False
         self.stream_url = url
         self.player.set_volume(self.vol.get_value())
@@ -1085,31 +1157,31 @@ class Rtube(Gtk.Application):
             return
         self.play_btn.set_label("⏸" if phase == "playing" else "▶")
         if phase == "playing" and not self.at_end:
-            self.set_status("Szól")
+            self.set_status(tr("Szól"))
         elif phase == "paused":
-            self.set_status("Szünet")
+            self.set_status(tr("Szünet"))
 
     def on_error(self, message):
         if self.closing:
             return
         self.play_btn.set_label("▶")
         self.status.set_tooltip_text(message or "")
-        self.set_status("Lejátszás sikertelen.")
+        self.set_status(tr("Lejátszás sikertelen."))
 
     def on_eos(self):
         if self.closing:
             return
         self.at_end = True
         self.play_btn.set_label("▶")
-        self.set_status("Vége")
+        self.set_status(tr("Vége"))
 
     def on_buffer(self, percent):
         if self.closing or self.player.phase != "playing":
             return
         if percent < 100:
-            self.set_status(f"Pufferelés {percent}%")
+            self.set_status(tr("Pufferelés {percent}%", percent=percent))
         else:
-            self.set_status("Szól")
+            self.set_status(tr("Szól"))
 
     def on_seek(self, scale):
         if self._ui:
@@ -1145,7 +1217,7 @@ class Rtube(Gtk.Application):
         if self.player.phase == "playing":
             self.player.pause()
             
-        self.set_status("mpv indítása...")
+        self.set_status(tr("mpv indítása..."))
         
         # Odaadom neki a yt-dlp elérhetőségét és a YouTube linket
         yt_path = str(ytdlp_bin())
@@ -1157,9 +1229,9 @@ class Rtube(Gtk.Application):
                 ["mpv", f"--script-opts=ytdl_hook-ytdl_path={yt_path}", video_url], 
                 start_new_session=True
             )
-            self.set_status("mpv elindítva.")
+            self.set_status(tr("mpv elindítva."))
         except FileNotFoundError:
-            self.set_status("Hiba: Az mpv nincs telepítve.")
+            self.set_status(tr("Hiba: Az mpv nincs telepítve."))
 
     def tick(self):
         if self.closing:
@@ -1198,7 +1270,7 @@ class Rtube(Gtk.Application):
             self.fav_ids.add(video_id)
         self._save_favs()
         if self.mode == "favs":
-            self.render(self.fav_items, "Még nincs kedvenc. A szív menti a számot.")
+            self.render(self.fav_items, tr("Még nincs kedvenc. A szív menti a számot."))
         self.sync_hearts()
 
     def on_np_heart(self, *_args):
