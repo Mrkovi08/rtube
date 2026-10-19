@@ -4,6 +4,10 @@
 
 ## English
 
+| Glass | Winamp |
+|:---:|:---:|
+| ![Rtube glass look](screenshots/glass.png) | ![Rtube Winamp skin](screenshots/winamp.png) |
+
 YouTube search that plays audio only. A GTK4 app for Arch Linux with a
 frosted-glass look and a classic Winamp skin, plus a small cava spectrum visualizer.
 
@@ -52,6 +56,10 @@ sudo pacman -R rtube
 ---
 
 ## Magyar
+
+| Üveges | Winamp |
+|:---:|:---:|
+| ![Rtube üveges kinézet](screenshots/glass.png) | ![Rtube Winamp kinézet](screenshots/winamp.png) |
 
 YouTube kereső, ami csak a hangot játssza. GTK4 alkalmazás Arch Linuxra,
 üveges és klasszikus Winamp kinézettel, kis cava spektrumkijelzővel.
