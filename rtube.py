@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 """Rtube — YouTube kereső, csak hang. Matt szürke dizájn kék gombokkal és közvetlen mpv videó integrációval."""
 
+import hashlib
 import json
 import os
+import platform
+import re
 import shutil
 import signal
+import sys
 import subprocess
+import tempfile
 import threading
+import time
+import zipfile
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from pathlib import Path
 
 import gi
@@ -20,6 +28,11 @@ gi.require_version("Gst", "1.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gst, Gtk, Pango
 
+APP_ID = "io.github.rtube.Rtube"
+# X11: a WM_CLASS egyezzen a .desktop StartupWMClass-szal (különben "rtube.py" lenne)
+GLib.set_prgname(APP_ID)
+GLib.set_application_name("Rtube")
+
 HOME = Path.home()
 CONF = HOME / ".config/rtube"
 OLD_CONF = HOME / ".config/hangzo"
@@ -27,6 +40,10 @@ CACHE = HOME / ".cache/rtube/thumbs"
 FAV_PATH = CONF / "favorites.json"
 STATE_PATH = CONF / "state.json"
 SETTINGS_PATH = HOME / ".config/DankMaterialShell/settings.json"
+# Felhasználói eszközök (friss yt-dlp, deno), ha a rendszeré hiányzik/régi (pl. Ubuntu/Mint)
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
+TOOLS_DIR = DATA_HOME / "rtube/bin"
+TOOLS_STATE = CONF / "tools.json"
 
 AUDIO_FORMAT = (
     "bestaudio[acodec=opus][ext=webm]/"
@@ -91,6 +108,14 @@ EN = {
     "Ismeretlen hiba.": "Unknown error.",
     "hiba": "error",
     "A GStreamer playbin nem elérhető.": "GStreamer playbin is not available.",
+    # Eszközök (yt-dlp, deno) letöltése
+    "yt-dlp letöltése…": "Downloading yt-dlp…",
+    "yt-dlp frissítése…": "Updating yt-dlp…",
+    "yt-dlp kész: {version}": "yt-dlp ready: {version}",
+    "deno letöltése (YouTube JS futtatókörnyezet)…": "Downloading deno (YouTube JS runtime)…",
+    "deno kész: {version}": "deno ready: {version}",
+    "A letöltés nem sikerült: {name}": "Download failed: {name}",
+    "A yt-dlp még töltődik…": "yt-dlp is still downloading…",
 }
 
 
@@ -388,12 +413,278 @@ def norm_duration(value):
         return None
 
 
+YTDLP_MAX_AGE_DAYS = 90      # ennél régebbi rendszer yt-dlp-t nem használunk YouTube-hoz
+YTDLP_JS_MIN = (2025, 11, 12)  # ettől ismeri a --js-runtimes kapcsolót
+YTDLP_CHECK_EVERY = 86400    # a saját yt-dlp frissességét naponta egyszer nézzük
+NODE_MIN = 20
+DENO_MIN = 2
+
+TOOLS = {"ytdlp": None, "js": None, "busy": True}  # induláskor ensure_tools() állítja be
+_TOOLS_LOCK = threading.Lock()
+
+
+def _tool_version(path, args=("--version",)):
+    try:
+        out = subprocess.run(
+            [str(path), *args], capture_output=True, text=True, timeout=20
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.strip().splitlines()[0] if out.strip() else None
+
+
+def _ytdlp_date(version):
+    m = re.match(r"(\d{4})\.(\d{1,2})\.(\d{1,2})", version or "")
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def _ytdlp_fresh(version):
+    d = _ytdlp_date(version)
+    if not d:
+        return False
+    try:
+        return (date.today() - date(*d)).days <= YTDLP_MAX_AGE_DAYS
+    except ValueError:
+        return False
+
+
+def _ytdlp_candidates():
+    seen, out = set(), []
+    env = os.environ.get("RTUBE_YTDLP")
+    for c in (env, TOOLS_DIR / "yt-dlp", HOME / ".local/bin/yt-dlp", shutil.which("yt-dlp")):
+        if c and Path(c).is_file() and os.access(c, os.X_OK) and str(c) not in seen:
+            seen.add(str(c))
+            out.append(Path(c))
+    return out
+
+
 def ytdlp_bin():
-    local = HOME / ".local/bin/yt-dlp"
-    if local.is_file():
-        return local
-    found = shutil.which("yt-dlp")
-    return Path(found) if found else local
+    """A használandó yt-dlp: a kiválasztott friss, különben a legjobb meglévő."""
+    if TOOLS["ytdlp"] is not None:
+        return TOOLS["ytdlp"]
+    found = _ytdlp_candidates()
+    return found[0] if found else TOOLS_DIR / "yt-dlp"
+
+
+def ytdlp_extra_args():
+    """JS futtatókörnyezet a YouTube-hoz (a felhasználói yt-dlp config érvényben marad)."""
+    js = TOOLS.get("js")
+    return ["--js-runtimes", f"{js[0]}:{js[1]}"] if js else []
+
+
+def _arch():
+    m = platform.machine().lower()
+    if m in ("x86_64", "amd64"):
+        return "x86_64"
+    if m in ("aarch64", "arm64"):
+        return "aarch64"
+    return None
+
+
+def _http_get(url, timeout=60):
+    req = urllib.request.Request(url, headers={"User-Agent": "rtube"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read()
+
+
+def _download_verified(url, sha_url, sha_name, dest_tmp):
+    """Letölt egy kiadási fájlt és ellenőrzi az SHA-256 összegét."""
+    sums = _http_get(sha_url, 30).decode("utf-8", "replace")
+    want = None
+    for line in sums.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[-1].lstrip("*") == sha_name:
+            want = parts[0].lower()
+    if not want:
+        raise RuntimeError("checksum missing")
+    h = hashlib.sha256()
+    req = urllib.request.Request(url, headers={"User-Agent": "rtube"})
+    with urllib.request.urlopen(req, timeout=60) as resp, open(dest_tmp, "wb") as fh:
+        while True:
+            chunk = resp.read(1 << 20)
+            if not chunk:
+                break
+            h.update(chunk)
+            fh.write(chunk)
+    if h.hexdigest() != want:
+        raise RuntimeError("checksum mismatch")
+
+
+def _fetch_ytdlp():
+    arch = _arch()
+    # x86_64/aarch64: önálló bináris (benne van a sütik visszafejtéséhez kellő secretstorage is)
+    name = {"x86_64": "yt-dlp_linux", "aarch64": "yt-dlp_linux_aarch64"}.get(arch, "yt-dlp")
+    base = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/"
+    TOOLS_DIR.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=TOOLS_DIR, prefix=".yt-dlp.")
+    os.close(fd)
+    try:
+        _download_verified(base + name, base + "SHA2-256SUMS", name, tmp)
+        os.chmod(tmp, 0o755)
+        os.replace(tmp, TOOLS_DIR / "yt-dlp")
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    return TOOLS_DIR / "yt-dlp"
+
+
+def _fetch_deno():
+    arch = _arch()
+    if not arch:
+        raise RuntimeError("unsupported architecture")
+    name = f"deno-{arch}-unknown-linux-gnu.zip"
+    base = "https://github.com/denoland/deno/releases/latest/download/"
+    TOOLS_DIR.mkdir(parents=True, exist_ok=True)
+    fd, tmpzip = tempfile.mkstemp(dir=TOOLS_DIR, prefix=".deno.", suffix=".zip")
+    os.close(fd)
+    tmpbin = TOOLS_DIR / ".deno.new"
+    try:
+        _download_verified(base + name, base + name + ".sha256sum", name, tmpzip)
+        with zipfile.ZipFile(tmpzip) as zf, zf.open("deno") as src, open(tmpbin, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        os.chmod(tmpbin, 0o755)
+        os.replace(tmpbin, TOOLS_DIR / "deno")
+    finally:
+        for f in (tmpzip, tmpbin):
+            if os.path.exists(f):
+                os.unlink(f)
+    return TOOLS_DIR / "deno"
+
+
+def _major(version):
+    m = re.search(r"(\d+)\.\d+", version or "")
+    return int(m.group(1)) if m else 0
+
+
+def _find_js_runtime():
+    """deno (>=2) vagy node (>=20) — ezeket tudja a yt-dlp YouTube-hoz."""
+    for path in (TOOLS_DIR / "deno", shutil.which("deno"), HOME / ".deno/bin/deno", HOME / ".local/bin/deno"):
+        if path and Path(path).is_file():
+            v = _tool_version(path)
+            if _major(v) >= DENO_MIN:
+                return ("deno", str(path), v.split()[1] if v and len(v.split()) > 1 else v)
+    for name in ("node", "nodejs"):
+        path = shutil.which(name)
+        if path:
+            v = _tool_version(path)
+            if _major((v or "").lstrip("v")) >= NODE_MIN:
+                return ("node", path, v)
+    return None
+
+
+def _load_tools_state():
+    try:
+        return json.loads(TOOLS_STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_tools_state(state):
+    try:
+        CONF.mkdir(parents=True, exist_ok=True)
+        TOOLS_STATE.write_text(json.dumps(state))
+    except OSError:
+        pass
+
+
+def _latest_ytdlp_tag():
+    req = urllib.request.Request(
+        "https://github.com/yt-dlp/yt-dlp/releases/latest", headers={"User-Agent": "rtube"}, method="HEAD"
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return resp.geturl().rstrip("/").rsplit("/", 1)[-1]
+
+
+def select_ytdlp(status=lambda _msg: None, allow_download=True):
+    """Friss yt-dlp kiválasztása; ha nincs, letöltés a felhasználói könyvtárba."""
+    best, best_ver = None, None
+    for cand in _ytdlp_candidates():
+        ver = _tool_version(cand)
+        if not ver:
+            continue
+        if best is None or (_ytdlp_date(ver) or ()) > (_ytdlp_date(best_ver) or ()):
+            best, best_ver = cand, ver
+        if _ytdlp_fresh(ver) and cand != TOOLS_DIR / "yt-dlp":
+            return cand, ver  # friss rendszer/felhasználói példány: azt használjuk
+    managed = TOOLS_DIR / "yt-dlp"
+    if allow_download:
+        state = _load_tools_state()
+        need = not managed.is_file() or best != managed
+        if not need and time.time() - state.get("ytdlp_checked", 0) > YTDLP_CHECK_EVERY:
+            try:
+                tag = _latest_ytdlp_tag()
+                state["ytdlp_checked"] = time.time()
+                _save_tools_state(state)
+                need = bool(tag) and tag != best_ver
+            except (OSError, urllib.error.URLError, ValueError):
+                pass
+        if need:
+            status(tr("yt-dlp frissítése…") if managed.is_file() else tr("yt-dlp letöltése…"))
+            try:
+                _fetch_ytdlp()
+                ver = _tool_version(managed)
+                state["ytdlp_checked"] = time.time()
+                _save_tools_state(state)
+                status(tr("yt-dlp kész: {version}", version=ver or "?"))
+                return managed, ver
+            except Exception:
+                status(tr("A letöltés nem sikerült: {name}", name="yt-dlp"))
+    return best, best_ver
+
+
+def select_js(ytdlp_ver, status=lambda _msg: None, allow_download=True):
+    if (_ytdlp_date(ytdlp_ver) or ()) < YTDLP_JS_MIN:
+        return None
+    js = _find_js_runtime()
+    if js or not allow_download or not _arch():
+        return js
+    status(tr("deno letöltése (YouTube JS futtatókörnyezet)…"))
+    try:
+        path = _fetch_deno()
+        v = _tool_version(path)
+        status(tr("deno kész: {version}", version=(v or "?").split()[1] if v and len(v.split()) > 1 else (v or "?")))
+        return ("deno", str(path), v)
+    except Exception:
+        status(tr("A letöltés nem sikerült: {name}", name="deno"))
+        return None
+
+
+def ensure_tools(status=lambda _msg: None, allow_download=True):
+    """Háttérszálon fut induláskor: yt-dlp + JS futtatókörnyezet kiválasztása/letöltése."""
+    with _TOOLS_LOCK:
+        TOOLS["busy"] = True
+        try:
+            path, ver = select_ytdlp(status, allow_download)
+            if path is not None:
+                TOOLS["ytdlp"] = path
+            TOOLS["js"] = select_js(ver, status, allow_download)
+            TOOLS["ytdlp_version"] = ver
+        finally:
+            TOOLS["busy"] = False
+    return TOOLS
+
+
+def cava_version():
+    out = _tool_version("cava", ("-v",)) or ""
+    m = re.search(r"(\d+)\.(\d+)", out)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def cava_inputs():
+    """cava 0.9+ natív pipewire, régebbi (pl. Ubuntu 24.04: 0.7.4) pulse; RTUBE_CAVA_INPUT felülír."""
+    forced = os.environ.get("RTUBE_CAVA_INPUT", "").strip()
+    if forced:
+        return [forced]
+    ver = cava_version()
+    if ver is None:
+        # Egyes disztró buildek (pl. Ubuntu) üres verziót írnak ki: a binárisban keresünk
+        try:
+            ver = (0, 9) if b"pipewire" in Path(shutil.which("cava")).read_bytes() else (0, 8)
+        except (OSError, TypeError):
+            ver = (0, 8)
+    if ver >= (0, 9):
+        return ["pipewire", "pulse"]
+    return ["pulse", "pipewire"]
 
 
 def stop_proc(proc):
@@ -622,6 +913,8 @@ class Visualizer(Gtk.DrawingArea):
         self.winamp = winamp
         self.levels = [0] * self.BARS
         self.proc = None
+        self.method = None
+        self.stopped = False
         self.set_content_height(34 if winamp else 30)
         self.set_hexpand(True)
         self.set_draw_func(self._draw)
@@ -630,34 +923,46 @@ class Visualizer(Gtk.DrawingArea):
     def _start(self):
         if not shutil.which("cava"):
             return
+        threading.Thread(target=self._launch, daemon=True).start()
+
+    def _launch(self):
         cfg = CONF / "cava.conf"
-        try:
-            CONF.mkdir(parents=True, exist_ok=True)
-            cfg.write_text(
-                "[general]\n"
-                f"bars = {self.BARS}\n"
-                "framerate = 30\n"
-                "[input]\n"
-                "method = pipewire\n"
-                "source = auto\n"
-                "[output]\n"
-                "method = raw\n"
-                "raw_target = /dev/stdout\n"
-                "data_format = ascii\n"
-                "ascii_max_range = 100\n"
-                "bar_delimiter = 59\n"
-                "frame_delimiter = 10\n"
-            )
-            self.proc = subprocess.Popen(
-                ["cava", "-p", str(cfg)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-            )
-        except Exception:
-            self.proc = None
-            return
-        threading.Thread(target=self._reader, daemon=True).start()
+        for method in cava_inputs():
+            try:
+                CONF.mkdir(parents=True, exist_ok=True)
+                cfg.write_text(
+                    "[general]\n"
+                    f"bars = {self.BARS}\n"
+                    "framerate = 30\n"
+                    "[input]\n"
+                    f"method = {method}\n"
+                    "source = auto\n"
+                    "[output]\n"
+                    "method = raw\n"
+                    "raw_target = /dev/stdout\n"
+                    "data_format = ascii\n"
+                    "ascii_max_range = 100\n"
+                    "bar_delimiter = 59\n"
+                    "frame_delimiter = 10\n"
+                )
+                proc = subprocess.Popen(
+                    ["cava", "-p", str(cfg)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                )
+            except Exception:
+                continue
+            try:
+                proc.wait(timeout=1.5)  # azonnal kilép, ha ez a bemenet nem megy
+            except subprocess.TimeoutExpired:
+                if self.stopped:
+                    proc.terminate()
+                    return
+                self.proc = proc
+                self.method = method
+                self._reader()
+                return
 
     def _reader(self):
         proc = self.proc
@@ -707,6 +1012,7 @@ class Visualizer(Gtk.DrawingArea):
                 cr.fill()
 
     def stop(self):
+        self.stopped = True
         if self.proc and self.proc.poll() is None:
             try:
                 self.proc.terminate()
@@ -717,8 +1023,11 @@ class Visualizer(Gtk.DrawingArea):
 class Rtube(Gtk.Application):
     def __init__(self):
         super().__init__(
-            application_id="io.github.rtube.Rtube",
-            flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
+            application_id=APP_ID,
+            # RTUBE_NON_UNIQUE=1: külön példány (teszteléshez, ha már fut egy Rtube)
+            flags=Gio.ApplicationFlags.NON_UNIQUE
+            if os.environ.get("RTUBE_NON_UNIQUE") == "1"
+            else Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
         self.win = None
         self.connect("activate", self.on_activate)
@@ -728,6 +1037,16 @@ class Rtube(Gtk.Application):
             self.win.present()
             return
         migrate_conf()
+        try:
+            gi.require_version("GdkX11", "4.0")
+            from gi.repository import GdkX11
+
+            display = Gdk.Display.get_default()
+            if isinstance(display, GdkX11.X11Display):
+                GdkX11.X11Display.set_program_class(display, APP_ID)
+        except (ImportError, ValueError, AttributeError, TypeError):
+            pass
+        Gtk.Window.set_default_icon_name(APP_ID)
         self.palette = load_palette()
         self.radius = load_radius()
         self.pool = ThreadPoolExecutor(max_workers=4)
@@ -753,6 +1072,16 @@ class Rtube(Gtk.Application):
         self.player.set_volume(self.volume)
         GLib.timeout_add(250, self.tick)
         self.win.present()
+        threading.Thread(
+            target=ensure_tools,
+            args=(lambda msg: GLib.idle_add(self._tool_status, msg),),
+            daemon=True,
+        ).start()
+
+    def _tool_status(self, msg):
+        if not self.closing:
+            self.set_status(msg)
+        return False
 
     def _build(self):
         provider = Gtk.CssProvider()
@@ -942,6 +1271,9 @@ class Rtube(Gtk.Application):
         query = self.entry.get_text().strip()
         if len(query) < 2:
             return False
+        if TOOLS["busy"] and TOOLS["ytdlp"] is None:
+            self.set_status(tr("A yt-dlp még töltődik…"))
+            return False
         if not ytdlp_bin().is_file():
             self.set_status(tr("Hiányzik a yt-dlp."))
             return False
@@ -957,6 +1289,7 @@ class Rtube(Gtk.Application):
         out, err, code = run_cmd(
             [
                 str(ytdlp_bin()),
+                *ytdlp_extra_args(),
                 "--flat-playlist",
                 "--dump-single-json",
                 "--no-warnings",
@@ -1075,6 +1408,9 @@ class Rtube(Gtk.Application):
         self.pool.submit(work)
 
     def play(self, track):
+        if TOOLS["busy"] and TOOLS["ytdlp"] is None:
+            self.set_status(tr("A yt-dlp még töltődik…"))
+            return
         if not ytdlp_bin().is_file():
             self.set_status(tr("Hiányzik a yt-dlp."))
             return
@@ -1108,6 +1444,7 @@ class Rtube(Gtk.Application):
         out, err, code = run_cmd(
             [
                 str(ytdlp_bin()),
+                *ytdlp_extra_args(),
                 "-f",
                 AUDIO_FORMAT,
                 "-g",
@@ -1225,8 +1562,12 @@ class Rtube(Gtk.Application):
         
         try:
             # Az mpv most már maga oldja meg a letöltést
+            cmd = ["mpv", f"--script-opts=ytdl_hook-ytdl_path={yt_path}"]
+            js = TOOLS.get("js")
+            if js:
+                cmd.append(f"--ytdl-raw-options-append=js-runtimes={js[0]}:{js[1]}")
             subprocess.Popen(
-                ["mpv", f"--script-opts=ytdl_hook-ytdl_path={yt_path}", video_url], 
+                cmd + [video_url], 
                 start_new_session=True
             )
             self.set_status(tr("mpv elindítva."))
@@ -1359,10 +1700,21 @@ class Rtube(Gtk.Application):
         return False
 
 
-def main():
-    import sys
+def check_tools():
+    """rtube --check-tools: kiírja, mit választ (yt-dlp, JS futtatókörnyezet, cava bemenet)."""
+    ensure_tools(print, allow_download="--no-download" not in sys.argv)
+    print(f"yt-dlp: {TOOLS['ytdlp']} ({TOOLS.get('ytdlp_version')})")
+    print(f"yt-dlp extra args: {' '.join(ytdlp_extra_args()) or '-'}")
+    print(f"cava: {shutil.which('cava') or '-'} version={cava_version()} inputs={cava_inputs()}")
+    return 0
 
-    sys.exit(Rtube().run(sys.argv))
+
+def main():
+    if "--winamp" in sys.argv:
+        os.environ["RTUBE_SKIN"] = "winamp"
+    if "--check-tools" in sys.argv:
+        sys.exit(check_tools())
+    sys.exit(Rtube().run([a for a in sys.argv if a != "--winamp"]))
 
 
 if __name__ == "__main__":
