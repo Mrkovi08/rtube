@@ -53,6 +53,82 @@ AUDIO_FORMAT = (
 )
 UA = "Mozilla/5.0"
 
+# Kinézet: RTUBE_SKIN=modern|winamp, vagy rtube --modern / --winamp
+SKIN = os.environ.get("RTUBE_SKIN", "").strip().lower()
+if "--modern" in sys.argv:
+    SKIN = "modern"
+elif "--winamp" in sys.argv:
+    SKIN = "winamp"
+MODERN = SKIN == "modern"
+# A modern kinézet saját SVG ikonjai ide kerülnek (felhasználói cache, csomagból telepítve is írható)
+ICON_DIR = Path(os.environ.get("XDG_CACHE_HOME") or HOME / ".cache") / "rtube/icons"
+
+
+def T(hu, en):
+    """Kétnyelvű felirat: magyar nyelvnél magyar, egyébként angol (LANG lent, detect_lang)."""
+    return hu if LANG == "hu" else en
+
+
+# Szív ikonok (symbolic SVG, a GTK a szövegszínre színezi őket).
+HEART_OUTLINE_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
+    '<path fill="#2e3436" fill-rule="evenodd" d="M8 14.6 2.5 9.2C1 7.7 1 5.3 2.5 3.8 4 2.3 6.4 2.3 7.9 3.8L8 3.9l.1-.1'
+    'c1.5-1.5 3.9-1.5 5.4 0 1.5 1.5 1.5 3.9 0 5.4Z'
+    'M8 12.5l4.4-4.3c.9-.9.9-2.4 0-3.3-.9-.9-2.4-.9-3.3 0L8 6 6.9 4.9c-.9-.9-2.4-.9-3.3 0-.9.9-.9 2.4 0 3.3Z"/></svg>'
+)
+HEART_FILLED_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
+    '<path fill="#2e3436" d="M8 14.6 2.5 9.2C1 7.7 1 5.3 2.5 3.8 4 2.3 6.4 2.3 7.9 3.8L8 3.9l.1-.1'
+    'c1.5-1.5 3.9-1.5 5.4 0 1.5 1.5 1.5 3.9 0 5.4Z"/></svg>'
+)
+
+
+_SVG_HEAD = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
+PLAY_SVG = _SVG_HEAD + (
+    '<path fill="#2e3436" d="M5 3.1v9.8c0 .7.8 1.1 1.3.7l7.3-4.9c.5-.3.5-1.1 0-1.4L6.3 2.4C5.8 2 5 2.4 5 3.1Z"/></svg>'
+)
+PAUSE_SVG = _SVG_HEAD + (
+    '<rect fill="#2e3436" x="3.5" y="2.5" width="3.2" height="11" rx="1"/>'
+    '<rect fill="#2e3436" x="9.3" y="2.5" width="3.2" height="11" rx="1"/></svg>'
+)
+VIDEO_SVG = _SVG_HEAD + (
+    '<path fill="#2e3436" fill-rule="evenodd" d="M3 3.5h6.5A2 2 0 0 1 11.5 5.5v5a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z'
+    'M3 5a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h6.5a.5.5 0 0 0 .5-.5v-5A.5.5 0 0 0 9.5 5Z"/>'
+    '<path fill="#2e3436" d="m12.5 6.6 2.2-1.5c.3-.2.8 0 .8.4v5c0 .4-.5.6-.8.4l-2.2-1.5Z"/></svg>'
+)
+COMPACT_SVG = _SVG_HEAD + (
+    '<path fill="#2e3436" fill-rule="evenodd" d="M6 1h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2Z'
+    'M6 2.5a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5V3a.5.5 0 0 0-.5-.5Z"/>'
+    '<rect fill="#2e3436" x="6.5" y="4" width="3" height="3" rx=".6"/>'
+    '<rect fill="#2e3436" x="6.5" y="9" width="3" height="1.3" rx=".6"/></svg>'
+)
+
+
+def ensure_heart_icons():
+    """A saját symbolic ikonokat a cache-be írja; True, ha használhatók."""
+    try:
+        # SVG betöltő (librsvg) nélkül a saját ikonok törött képként jelennének meg:
+        # ilyenkor maradnak a téma beépített ikonjai
+        if not any("svg" in (f.get_name() or "") for f in GdkPixbuf.Pixbuf.get_formats()):
+            return False
+        ICON_DIR.mkdir(parents=True, exist_ok=True)
+        for name, data in (
+            ("rtube-heart-outline-symbolic.svg", HEART_OUTLINE_SVG),
+            ("rtube-heart-filled-symbolic.svg", HEART_FILLED_SVG),
+            ("rtube-play-symbolic.svg", PLAY_SVG),
+            ("rtube-pause-symbolic.svg", PAUSE_SVG),
+            ("rtube-video-symbolic.svg", VIDEO_SVG),
+            ("rtube-compact-symbolic.svg", COMPACT_SVG),
+        ):
+            path = ICON_DIR / name
+            if not path.exists() or path.read_text() != data:
+                path.write_text(data)
+        theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        theme.add_search_path(str(ICON_DIR))
+        return True
+    except Exception:
+        return False
+
 
 # ---- NYELV (magyar / angol) ----
 def detect_lang():
@@ -376,6 +452,214 @@ scale slider {
   border: 1px solid #3a3a48;
 }
 """
+
+
+MODERN_CSS = """
+window, window.background {
+  background-color: #1c1c1f;
+  color: #ededf0;
+  font-family: "Inter", "Inter Variable", "Noto Sans", "Cantarell", sans-serif;
+}
+label { color: #ededf0; }
+label.brand { color: #ededf0; font-weight: 700; font-size: 17px; }
+label.title { font-weight: 500; font-size: 13.5px; }
+label.dim { color: #9a9aa3; font-size: 12px; }
+label.list-head { font-weight: 600; font-size: 13px; }
+label.np-label { color: #6b6b74; font-size: 11px; font-weight: 600; letter-spacing: 1.2px; }
+label.np-artist { color: #9a9aa3; font-size: 13px; font-weight: 500; }
+label.np-title { color: #ededf0; font-size: 19px; font-weight: 600; }
+label.time, label.status-line { color: #6b6b74; font-size: 11.5px; font-feature-settings: "tnum"; }
+.logo {
+  background-color: #5b8cff;
+  color: #0f1422;
+  border-radius: 8px;
+  min-width: 26px;
+  min-height: 26px;
+}
+.panel {
+  background-color: #232327;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: none;
+  padding: 12px 10px 10px 10px;
+}
+.panel.np-card { padding: 22px 24px 20px 24px; }
+entry.search, entry.search:focus, entry.search:focus-visible, entry.search:focus-within {
+  background-color: #232327;
+  color: #ededf0;
+  caret-color: #5b8cff;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 0 12px;
+  min-height: 38px;
+  outline: none;
+  box-shadow: none;
+}
+entry.search:focus-within { border-color: rgba(91, 140, 255, 0.55); }
+entry.search image { color: #6b6b74; }
+entry.search text placeholder { color: #6b6b74; }
+button {
+  background-image: none;
+  background-color: transparent;
+  color: #9a9aa3;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  box-shadow: none;
+  outline: none;
+  padding: 0 12px;
+}
+button:hover { background-color: #2a2a2f; color: #ededf0; }
+button:disabled { opacity: 0.45; }
+.seg {
+  background-color: #232327;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 3px;
+}
+.seg button { border-radius: 9px; min-height: 32px; padding: 0 14px; font-weight: 500; font-size: 13px; }
+.seg button.active-view, .seg button.active-view:hover {
+  background-color: #323238;
+  color: #ededf0;
+  border-color: transparent;
+}
+.seg button label { color: inherit; }
+button.np-icon {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 20px;
+  background-color: #2a2a2f;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #9a9aa3;
+  font-size: 17px;
+}
+button.np-icon:hover { background-color: #323238; color: #ededf0; }
+button.np-icon.fav, button.np-icon.fav label { color: #5b8cff; }
+button.np-play, button.np-play:hover {
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0;
+  border-radius: 28px;
+  background-color: #5b8cff;
+  color: #0f1422;
+  border: none;
+  box-shadow: 0 8px 22px rgba(91, 140, 255, 0.35);
+  -gtk-icon-size: 20px;
+}
+button.np-play:hover { background-color: #7aa2ff; }
+button.np-play label { color: #0f1422; font-size: 18px; }
+button.np-play:disabled { opacity: 0.55; box-shadow: none; }
+button.heart {
+  border: none;
+  background-image: none;
+  background-color: transparent;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 16px;
+  color: #6b6b74;
+  font-size: 16px;
+}
+button.heart label { color: inherit; }
+button.heart:hover { background-color: #2a2a2f; color: #ededf0; }
+button.heart.fav, button.heart.fav:hover { color: #5b8cff; }
+list, scrolledwindow, viewport { background: transparent; }
+list row {
+  background: transparent;
+  border-radius: 14px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+}
+list row:hover { background-color: rgba(255, 255, 255, 0.035); }
+list row.playing {
+  background-color: rgba(91, 140, 255, 0.14);
+  border-color: rgba(91, 140, 255, 0.28);
+}
+list row.playing label.title { color: #7aa2ff; }
+.cover-frame {
+  background-color: #2a2a2f;
+  background-image: radial-gradient(circle at 30% 28%, rgba(255, 178, 122, 0.35), transparent 45%),
+                    radial-gradient(circle at 75% 70%, rgba(109, 93, 252, 0.45), transparent 55%),
+                    linear-gradient(145deg, #2a2550, #151526);
+  border-radius: 10px;
+}
+.cover-frame.np-cover {
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+scale { padding: 6px 0; }
+scale trough {
+  background-color: #323238;
+  border: none;
+  border-radius: 99px;
+  min-height: 4px;
+}
+scale highlight {
+  background-color: #5b8cff;
+  border: none;
+  border-radius: 99px;
+  min-height: 4px;
+  margin: 0;
+}
+scale.vol highlight { background-color: #9a9aa3; }
+scale slider {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  border-radius: 99px;
+  transition: min-width 120ms ease-out, min-height 120ms ease-out, margin 120ms ease-out;
+}
+scale:hover slider, scale:active slider, scale slider:active {
+  background-color: #ffffff;
+  min-width: 12px;
+  min-height: 12px;
+  margin: -4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+image.vol-icon { color: #9a9aa3; }
+button.compact-btn {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 12px;
+  background-color: #232327;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #9a9aa3;
+}
+button.compact-btn:hover { background-color: #2a2a2f; color: #ededf0; }
+button.np-head-btn {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #9a9aa3;
+}
+button.np-head-btn label { color: inherit; font-size: 12px; }
+button.np-head-btn:hover { background-color: #2a2a2f; color: #ededf0; }
+.panel.upnext { padding: 8px 8px 8px 10px; border-radius: 16px; }
+button.upnext-main { padding: 2px; border-radius: 12px; }
+button.upnext-main:hover { background-color: rgba(255, 255, 255, 0.035); }
+label.upnext-label { color: #6b6b74; font-size: 10.5px; font-weight: 600; letter-spacing: 1.1px; }
+label.upnext-title { color: #ededf0; font-size: 13px; font-weight: 500; }
+button.upnext-up { min-width: 32px; min-height: 32px; padding: 0; border-radius: 16px; color: #6b6b74; }
+button.upnext-up:hover { background-color: #2a2a2f; color: #ededf0; }
+"""
+
+
+def load_css(provider, css):
+    """GTK 4.12+: load_from_string; régebbi GTK 4-en load_from_data."""
+    if hasattr(provider, "load_from_string"):
+        provider.load_from_string(css)
+    else:
+        try:
+            provider.load_from_data(css, -1)
+        except TypeError:
+            provider.load_from_data(css.encode("utf-8"))
 
 
 def fmt_time(seconds):
@@ -1086,9 +1370,19 @@ class Rtube(Gtk.Application):
     def _build(self):
         provider = Gtk.CssProvider()
         css = build_css(self.palette, self.radius)
-        if os.environ.get("RTUBE_SKIN") == "winamp":
+        if SKIN == "winamp":
             css += WINAMP_CSS
-        provider.load_from_string(css)
+        if MODERN:
+            css += MODERN_CSS
+            load_css(provider, css)
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(),
+                provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+            )
+            self._build_modern()
+            return
+        load_css(provider, css)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
             provider,
@@ -1217,10 +1511,10 @@ class Rtube(Gtk.Application):
         seek_row.append(self.dur_label)
 
         player_card.append(row)
-        self.viz = Visualizer(winamp=os.environ.get("RTUBE_SKIN") == "winamp")
+        self.viz = Visualizer(winamp=SKIN == "winamp")
         player_card.append(self.viz)
         player_card.append(seek_row)
-        if os.environ.get("RTUBE_SKIN") == "winamp":
+        if SKIN == "winamp":
             # Winamp elrendezés: felül a lejátszó, alatta a kereső és a lista
             root.append(player_card)
             root.append(top)
@@ -1232,6 +1526,454 @@ class Rtube(Gtk.Application):
             root.append(list_card)
             root.append(player_card)
         self.win.set_child(root)
+
+    # ---- MODERN SKIN (RTUBE_SKIN=modern) ----
+    def _icon_button(self, icon, text, css_classes):
+        btn = Gtk.Button()
+        for cls in css_classes:
+            btn.add_css_class(cls)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
+        box.set_halign(Gtk.Align.CENTER)
+        img = Gtk.Image.new_from_icon_name(icon)
+        img.set_pixel_size(15)
+        box.append(img)
+        box.append(Gtk.Label(label=text))
+        btn.set_child(box)
+        return btn
+
+    def _build_modern(self):
+        self.heart_icons = ensure_heart_icons()
+        self.viz = None
+        self.win = Gtk.ApplicationWindow(application=self, title="Rtube")
+        self.win.set_default_size(960, 680)
+        self.win.set_size_request(760, 600)
+        self.win.connect("close-request", self.on_close)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        root.set_margin_top(16)
+        root.set_margin_bottom(20)
+        root.set_margin_start(20)
+        root.set_margin_end(20)
+
+        # Fejléc: logó + név, kereső, Találatok/Kedvencek kapcsoló
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        brand = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=9)
+        brand.set_valign(Gtk.Align.CENTER)
+        logo = Gtk.Image.new_from_icon_name("media-playback-start-symbolic")
+        logo.set_pixel_size(12)
+        logo.add_css_class("logo")
+        brand_label = Gtk.Label(label="Rtube")
+        brand_label.add_css_class("brand")
+        brand.append(logo)
+        brand.append(brand_label)
+        brand.set_margin_end(6)
+        self.entry = Gtk.Entry()
+        self.entry.set_placeholder_text(T("Keresés a YouTube-on…", "Search YouTube…"))
+        self.entry.add_css_class("search")
+        self.entry.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, "system-search-symbolic")
+        self.entry.set_hexpand(True)
+        self.entry.set_valign(Gtk.Align.CENTER)
+        self.entry.connect("activate", self._on_modern_activate)
+        self.entry.connect("changed", self.search_later)
+        seg = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        seg.add_css_class("seg")
+        seg.set_valign(Gtk.Align.CENTER)
+        self.results_btn = self._icon_button(
+            "view-list-symbolic", T("Találatok", "Results"), ["active-view"]
+        )
+        self.results_btn.connect("clicked", lambda *_a: self.mode == "favs" and self.on_favs())
+        heart_icon = "rtube-heart-outline-symbolic" if self.heart_icons else "non-starred-symbolic"
+        self.fav_btn = self._icon_button(heart_icon, T("Kedvencek", "Favorites"), [])
+        self.fav_btn.connect("clicked", lambda *_a: self.mode != "favs" and self.on_favs())
+        seg.append(self.results_btn)
+        seg.append(self.fav_btn)
+        self.compact_btn = Gtk.Button()
+        self.compact_btn.set_icon_name(
+            "rtube-compact-symbolic" if self.heart_icons else "view-restore-symbolic"
+        )
+        self.compact_btn.add_css_class("compact-btn")
+        self.compact_btn.set_valign(Gtk.Align.CENTER)
+        self.compact_btn.set_tooltip_text(T("Kompakt nézet", "Compact view"))
+        self.compact_btn.connect("clicked", lambda *_a: self._set_view("compact"))
+        top.append(brand)
+        top.append(self.entry)
+        top.append(seg)
+        top.append(self.compact_btn)
+        self.m_brand_label = brand_label
+        self.m_seg = seg
+
+        body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        body.set_vexpand(True)
+
+        # Bal oldal: lista kártya
+        list_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        list_card.add_css_class("panel")
+        list_card.set_hexpand(True)
+        list_card.set_vexpand(True)
+        head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        head.set_margin_start(10)
+        head.set_margin_end(10)
+        head.set_margin_top(2)
+        head.set_margin_bottom(4)
+        self.list_title = Gtk.Label(label=T("Találatok", "Results"), xalign=0)
+        self.list_title.add_css_class("list-head")
+        self.list_title.set_hexpand(True)
+        self.list_count = Gtk.Label(label="", xalign=1)
+        self.list_count.add_css_class("time")
+        head.append(self.list_title)
+        head.append(self.list_count)
+        list_card.append(head)
+        self.list = Gtk.ListBox()
+        self.list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.list.connect("row-activated", self.on_row)
+        scroll = BoundScroll()
+        scroll.set_child(self.list)
+        self.empty = Gtk.Label(label=T("Keress egy számra.", "Search for a song."))
+        self.empty.add_css_class("dim")
+        self.empty.set_wrap(True)
+        self.empty.set_vexpand(True)
+        self.empty.set_valign(Gtk.Align.CENTER)
+        self.stack = Gtk.Stack()
+        self.stack.set_vexpand(True)
+        self.stack.add_named(scroll, "list")
+        self.stack.add_named(self.empty, "empty")
+        self.stack.set_visible_child_name("empty")
+        list_card.append(self.stack)
+
+        # Jobb oldal: most szól kártya (332 px)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        card.add_css_class("panel")
+        card.add_css_class("np-card")
+        card.set_size_request(332, -1)
+        card.set_hexpand(False)
+        np_label = Gtk.Label(label=T("MOST SZÓL", "NOW PLAYING"), xalign=0)
+        np_label.add_css_class("np-label")
+        np_label.set_hexpand(True)
+        np_head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        np_head.set_size_request(-1, 24)
+        np_head.append(np_label)
+        self.full_btn = self._icon_button("view-list-symbolic", T("Lista", "List"), ["np-head-btn"])
+        self.full_btn.set_tooltip_text(T("Teljes nézet", "Full view"))
+        self.full_btn.set_valign(Gtk.Align.CENTER)
+        self.full_btn.connect("clicked", lambda *_a: self._set_view("full"))
+        np_head.append(self.full_btn)
+        np_frame, self.np_pic = self._cover(256)
+        np_frame.add_css_class("np-cover")
+        np_frame.set_margin_top(18)
+        self.np_sub = Gtk.Label(label=T("Válassz egy számot", "Pick a song"))
+        self.np_sub.add_css_class("np-artist")
+        self.np_sub.set_ellipsize(Pango.EllipsizeMode.END)
+        self.np_sub.set_max_width_chars(1)
+        self.np_sub.set_hexpand(True)
+        self.np_sub.set_margin_top(22)
+        self.np_title = Gtk.Label(label=T("Nincs lejátszás", "Nothing playing"))
+        self.np_title.add_css_class("np-title")
+        self.np_title.set_ellipsize(Pango.EllipsizeMode.END)
+        self.np_title.set_max_width_chars(1)
+        self.np_title.set_hexpand(True)
+        self.np_title.set_margin_top(4)
+
+        seek_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        seek_row.set_margin_top(16)
+        self.pos_label = Gtk.Label(label="0:00")
+        self.pos_label.add_css_class("time")
+        self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, 1)
+        self.scale.set_draw_value(False)
+        self.scale.set_hexpand(True)
+        self.scale.add_css_class("seek")
+        self.scale.connect("value-changed", self.on_seek)
+        self.dur_label = Gtk.Label(label="0:00")
+        self.dur_label.add_css_class("time")
+        seek_row.append(self.pos_label)
+        seek_row.append(self.scale)
+        seek_row.append(self.dur_label)
+
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        controls.set_margin_top(14)
+        self.video_btn = Gtk.Button()
+        self.video_btn.set_icon_name(
+            "rtube-video-symbolic" if self.heart_icons else "camera-video-symbolic"
+        )
+        self.video_btn.add_css_class("np-icon")
+        self.video_btn.set_tooltip_text(T("Megnyitás videóként (mpv)", "Open as video (mpv)"))
+        self.video_btn.set_valign(Gtk.Align.CENTER)
+        self.video_btn.set_sensitive(False)
+        self.video_btn.connect("clicked", self.on_video)
+        self.play_btn = Gtk.Button()
+        self.play_btn.add_css_class("np-play")
+        self.play_btn.set_valign(Gtk.Align.CENTER)
+        self.play_btn.set_tooltip_text(T("Lejátszás / szünet", "Play / pause"))
+        self.play_btn.set_sensitive(False)
+        self.play_btn.connect("clicked", self.on_play)
+        self._set_play_icon(False)
+        self.np_heart = Gtk.Button()
+        self.np_heart.add_css_class("np-icon")
+        self.np_heart.set_valign(Gtk.Align.CENTER)
+        self.np_heart.set_tooltip_text(T("Kedvencekhez adás", "Add to favorites"))
+        self.np_heart.connect("clicked", self.on_np_heart)
+        self._set_heart(self.np_heart, False)
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        self.vol_icon = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic")
+        self.vol_icon.add_css_class("vol-icon")
+        self.vol_icon.set_pixel_size(17)
+        self.vol_icon.set_valign(Gtk.Align.CENTER)
+        self.vol = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.vol.add_css_class("vol")
+        self.vol.set_draw_value(False)
+        self.vol.set_tooltip_text(T("Hangerő", "Volume"))
+        self.vol.set_size_request(72, -1)
+        self.vol.set_valign(Gtk.Align.CENTER)
+        self._ui = True
+        self.vol.set_value(self.volume)
+        self._ui = False
+        self._sync_vol_icon(self.volume)
+        self.vol.connect("value-changed", self.on_volume)
+        controls.append(self.video_btn)
+        controls.append(self.play_btn)
+        controls.append(self.np_heart)
+        controls.append(spacer)
+        controls.append(self.vol_icon)
+        controls.append(self.vol)
+
+        filler = Gtk.Box()
+        filler.set_vexpand(True)
+        self.status = Gtk.Label(
+            label=T("Keress egy számra, vagy nyisd meg a kedvenceket.", "Search for a song, or open your favorites.")
+        )
+        self.status.add_css_class("status-line")
+        self.status.set_ellipsize(Pango.EllipsizeMode.END)
+        self.status.set_max_width_chars(1)
+        self.status.set_hexpand(True)
+        self.status.set_margin_top(12)
+
+        card.append(np_head)
+        card.append(np_frame)
+        card.append(self.np_sub)
+        card.append(self.np_title)
+        card.append(seek_row)
+        card.append(controls)
+        card.append(filler)
+        card.append(self.status)
+
+        # Kompakt nézet: „Következő” sáv a kártya alatt
+        self.upnext = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.upnext.add_css_class("panel")
+        self.upnext.add_css_class("upnext")
+        up_main = Gtk.Button()
+        up_main.add_css_class("upnext-main")
+        up_main.set_hexpand(True)
+        up_main.set_tooltip_text(T("Következő lejátszása", "Play next"))
+        up_main.connect("clicked", self._play_upnext)
+        up_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        up_frame, self.up_pic = self._cover(40)
+        up_texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        up_texts.set_valign(Gtk.Align.CENTER)
+        up_texts.set_hexpand(True)
+        up_label = Gtk.Label(label=T("KÖVETKEZŐ", "UP NEXT"), xalign=0)
+        up_label.add_css_class("upnext-label")
+        self.up_title = Gtk.Label(label="", xalign=0)
+        self.up_title.add_css_class("upnext-title")
+        self.up_title.set_ellipsize(Pango.EllipsizeMode.END)
+        self.up_title.set_max_width_chars(1)
+        self.up_title.set_hexpand(True)
+        up_texts.append(up_label)
+        up_texts.append(self.up_title)
+        up_box.append(up_frame)
+        up_box.append(up_texts)
+        up_main.set_child(up_box)
+        up_btn = Gtk.Button()
+        up_btn.set_icon_name("go-up-symbolic")
+        up_btn.add_css_class("upnext-up")
+        up_btn.set_valign(Gtk.Align.CENTER)
+        up_btn.set_tooltip_text(T("Teljes nézet", "Full view"))
+        up_btn.connect("clicked", lambda *_a: self._set_view("full"))
+        self.upnext.append(up_main)
+        self.upnext.append(up_btn)
+        self.upnext_track = None
+
+        body.append(list_card)
+        body.append(card)
+        root.append(top)
+        root.append(body)
+        root.append(self.upnext)
+        self.win.set_child(root)
+        self.m_root = root
+        self.list_card = list_card
+        self.np_card = card
+        self.np_frame = np_frame
+        self.np_filler = filler
+        self.view = "full"
+        self._full_size = (960, 680)
+        self._set_view(self._load_view(), initial=True)
+
+    # ---- MODERN: teljes / kompakt nézet ----
+    def _set_view(self, view, initial=False):
+        compact = view == "compact"
+        if not initial and view == self.view:
+            return
+        if compact and not initial and self.win.get_width() > 0:
+            self._full_size = (max(760, self.win.get_width()), max(600, self.win.get_height()))
+        self.view = "compact" if compact else "full"
+        self.list_card.set_visible(not compact)
+        self.m_seg.set_visible(not compact)
+        self.m_brand_label.set_visible(not compact)
+        self.compact_btn.set_visible(not compact)
+        self.full_btn.set_visible(compact)
+        self.np_card.set_hexpand(compact)
+        self.np_card.set_size_request(-1 if compact else 332, -1)
+        # Csempézett (tiled) ablakban is keskeny, középre igazított oszlop maradjon
+        self.m_root.set_halign(Gtk.Align.CENTER if compact else Gtk.Align.FILL)
+        self.m_root.set_size_request(340 if compact else -1, -1)
+        cover = 240 if compact else 256
+        self.np_frame.set_size_request(cover, cover)
+        self.np_pic.set_size_request(cover, cover)
+        self._update_upnext()
+        if compact:
+            self.win.set_size_request(340, 560)
+            self.win.set_default_size(380, 720)
+        else:
+            self.win.set_size_request(760, 600)
+            self.win.set_default_size(*self._full_size)
+        if not initial:
+            self._save_state(modern_view=self.view)
+            # Hyprland lebegő ablakoknál a set_default_size nem mindig elég
+            GLib.idle_add(self._hypr_resize)
+
+    def _hypr_resize(self):
+        # Csak Hyprlandon (lebegő ablak): máshol a GTK set_default_size elég, csendben kihagyjuk
+        if (
+            self.closing
+            or not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+            or not shutil.which("hyprctl")
+        ):
+            return False
+        w, h = (380, 720) if self.view == "compact" else self._full_size
+        app_id = self.get_application_id()
+
+        def work():
+            try:
+                out = subprocess.run(
+                    ["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=3
+                ).stdout
+                pid = os.getpid()
+                for c in json.loads(out or "[]"):
+                    if c.get("pid") == pid and c.get("class") == app_id:
+                        if c.get("floating") and tuple(c.get("size") or ()) != (w, h):
+                            addr = c["address"]
+                            # Hyprland 0.56 (Lua): dispatcher objektum; régebbi: string szintaxis
+                            res = subprocess.run(
+                                ["hyprctl", "dispatch",
+                                 f'hl.dsp.window.resize({{ x = {w}, y = {h}, window = "address:{addr}" }})'],
+                                capture_output=True, text=True, timeout=3,
+                            )
+                            if res.stdout.strip() != "ok":
+                                subprocess.run(
+                                    ["hyprctl", "dispatch", "resizewindowpixel",
+                                     f"exact {w} {h},address:{addr}"],
+                                    capture_output=True, timeout=3,
+                                )
+                        break
+            except Exception:
+                pass
+
+        self.pool.submit(work)
+        return False
+
+    def _on_modern_activate(self, *_args):
+        if self.view == "compact" and len(self.entry.get_text().strip()) >= 2:
+            self._set_view("full")
+        self.search_now()
+
+    def _update_upnext(self):
+        if not MODERN or not hasattr(self, "upnext"):
+            return
+        rows = []
+        index = 0
+        while (row := self.list.get_row_at_index(index)) is not None:
+            rows.append(row.track)
+            index += 1
+        current_id = self.current["id"] if self.current else None
+        nxt = None
+        ids = [t["id"] for t in rows]
+        if current_id in ids:
+            pos = ids.index(current_id)
+            if pos + 1 < len(rows):
+                nxt = rows[pos + 1]
+        else:
+            nxt = next((t for t in rows if t["id"] != current_id), None)
+        self.upnext_track = nxt
+        if nxt is not None:
+            channel = nxt.get("channel") or ""
+            text = nxt.get("title") or nxt["id"]
+            self.up_title.set_text(f"{text} – {channel}" if channel else text)
+            if getattr(self.up_pic, "thumb_id", None) != nxt["id"]:
+                self.queue_thumb(nxt, self.up_pic)
+        self.upnext.set_visible(self.view == "compact" and nxt is not None)
+
+    def _play_upnext(self, *_args):
+        if self.upnext_track is not None:
+            self.play(self.upnext_track)
+
+    def _load_view(self):
+        try:
+            value = json.loads(STATE_PATH.read_text()).get("modern_view", "full")
+        except (OSError, json.JSONDecodeError, AttributeError):
+            return "full"
+        return "compact" if value == "compact" else "full"
+
+    def _set_play_icon(self, playing):
+        if MODERN:
+            own = getattr(self, "heart_icons", False)
+            if playing:
+                name = "rtube-pause-symbolic" if own else "media-playback-pause-symbolic"
+            else:
+                name = "rtube-play-symbolic" if own else "media-playback-start-symbolic"
+            self.play_btn.set_icon_name(name)
+        else:
+            self.play_btn.set_label("⏸" if playing else "▶")
+
+    def _set_heart(self, button, on):
+        if MODERN and getattr(self, "heart_icons", False):
+            button.set_icon_name(
+                "rtube-heart-filled-symbolic" if on else "rtube-heart-outline-symbolic"
+            )
+        else:
+            button.set_label("♥" if on else "♡")
+        if on:
+            button.add_css_class("fav")
+        else:
+            button.remove_css_class("fav")
+
+    def _sync_seg(self):
+        if not MODERN:
+            return
+        favs = self.mode == "favs"
+        if favs:
+            self.results_btn.remove_css_class("active-view")
+            self.fav_btn.add_css_class("active-view")
+        else:
+            self.results_btn.add_css_class("active-view")
+            self.fav_btn.remove_css_class("active-view")
+        self.list_title.set_text(T("Kedvencek", "Favorites") if favs else T("Találatok", "Results"))
+
+    def _sync_vol_icon(self, value):
+        if not MODERN:
+            return
+        if value <= 0:
+            name = "audio-volume-muted-symbolic"
+        elif value < 34:
+            name = "audio-volume-low-symbolic"
+        elif value < 67:
+            name = "audio-volume-medium-symbolic"
+        else:
+            name = "audio-volume-high-symbolic"
+        self.vol_icon.set_from_icon_name(name)
+
+    def _np_subtitle(self, track):
+        if MODERN:
+            return track.get("channel") or "YouTube"
+        return subtitle(track)
 
     def _cover(self, size):
         frame = Gtk.Box()
@@ -1279,6 +2021,7 @@ class Rtube(Gtk.Application):
             return False
         self.mode = "results"
         self.fav_btn.remove_css_class("active-view")
+        self._sync_seg()
         self.gen += 1
         gen = self.gen
         self.set_status(tr("Keresés…"))
@@ -1330,10 +2073,12 @@ class Rtube(Gtk.Application):
             self.mode = "results"
             self.fav_btn.remove_css_class("active-view")
             self.render(self.last_results, tr("Keress egy számra."))
+            self._sync_seg()
             return
         self.mode = "favs"
         self.fav_btn.add_css_class("active-view")
         self.render(self.fav_items, tr("Még nincs kedvenc. A szív menti a számot."))
+        self._sync_seg()
 
     def render(self, tracks, empty_text):
         while (row := self.list.get_row_at_index(0)) is not None:
@@ -1345,13 +2090,17 @@ class Rtube(Gtk.Application):
             for track in tracks:
                 self.list.append(self.make_row(track))
             self.stack.set_visible_child_name("list")
+        if MODERN:
+            self.list_count.set_text(
+                T(f"{len(tracks)} szám", f"{len(tracks)} songs") if tracks else ""
+            )
         self.mark_playing()
 
     def make_row(self, track):
         row = Gtk.ListBoxRow()
         row.track = track
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        frame, pic = self._cover(72)
+        frame, pic = self._cover(44 if MODERN else 72)
         self.queue_thumb(track, pic)
         texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         texts.set_hexpand(True)
@@ -1366,15 +2115,19 @@ class Rtube(Gtk.Application):
         sub.set_ellipsize(Pango.EllipsizeMode.END)
         texts.append(title)
         texts.append(sub)
-        heart = Gtk.Button(label="♥" if track["id"] in self.fav_ids else "♡")
+        heart = Gtk.Button()
         heart.add_css_class("heart")
-        if track["id"] in self.fav_ids:
-            heart.add_css_class("fav")
+        self._set_heart(heart, track["id"] in self.fav_ids)
         heart.set_valign(Gtk.Align.CENTER)
         heart.connect("clicked", lambda _b, item=track: self.toggle_fav(item))
         row.heart = heart
         box.append(frame)
         box.append(texts)
+        if MODERN:
+            sub.set_text(track.get("channel") or "YouTube")
+            dur = Gtk.Label(label=fmt_time(track.get("duration")), xalign=1)
+            dur.add_css_class("time")
+            box.append(dur)
         box.append(heart)
         row.set_child(box)
         return row
@@ -1425,7 +2178,7 @@ class Rtube(Gtk.Application):
         self.play_btn.set_sensitive(True)
         self.video_btn.set_sensitive(True)
         self.np_title.set_text(self.current["title"])
-        self.np_sub.set_text(subtitle(self.current))
+        self.np_sub.set_text(self._np_subtitle(self.current))
         self.queue_thumb(self.current, self.np_pic)
         self.sync_hearts()
         self.mark_playing()
@@ -1492,7 +2245,7 @@ class Rtube(Gtk.Application):
     def on_phase(self, phase):
         if self.closing:
             return
-        self.play_btn.set_label("⏸" if phase == "playing" else "▶")
+        self._set_play_icon(phase == "playing")
         if phase == "playing" and not self.at_end:
             self.set_status(tr("Szól"))
         elif phase == "paused":
@@ -1501,7 +2254,7 @@ class Rtube(Gtk.Application):
     def on_error(self, message):
         if self.closing:
             return
-        self.play_btn.set_label("▶")
+        self._set_play_icon(False)
         self.status.set_tooltip_text(message or "")
         self.set_status(tr("Lejátszás sikertelen."))
 
@@ -1509,7 +2262,7 @@ class Rtube(Gtk.Application):
         if self.closing:
             return
         self.at_end = True
-        self.play_btn.set_label("▶")
+        self._set_play_icon(False)
         self.set_status(tr("Vége"))
 
     def on_buffer(self, percent):
@@ -1542,6 +2295,7 @@ class Rtube(Gtk.Application):
         value = scale.get_value()
         self.player.set_volume(value)
         self._save_volume(value)
+        self._sync_vol_icon(value)
 
     # ---- KÖZVETLEN MPV MEGHÍVÁS ----
     def on_video(self, *_args):
@@ -1622,18 +2376,10 @@ class Rtube(Gtk.Application):
         index = 0
         while (row := self.list.get_row_at_index(index)) is not None:
             on = row.track["id"] in self.fav_ids
-            row.heart.set_label("♥" if on else "♡")
-            if on:
-                row.heart.add_css_class("fav")
-            else:
-                row.heart.remove_css_class("fav")
+            self._set_heart(row.heart, on)
             index += 1
         on_current = self.current is not None and self.current["id"] in self.fav_ids
-        self.np_heart.set_label("♥" if on_current else "♡")
-        if on_current:
-            self.np_heart.add_css_class("fav")
-        else:
-            self.np_heart.remove_css_class("fav")
+        self._set_heart(self.np_heart, on_current)
 
     def mark_playing(self):
         current_id = self.current["id"] if self.current else None
@@ -1644,6 +2390,7 @@ class Rtube(Gtk.Application):
             else:
                 row.remove_css_class("playing")
             index += 1
+        self._update_upnext()
 
     def _load_favs(self):
         try:
@@ -1679,15 +2426,26 @@ class Rtube(Gtk.Application):
         return max(0.0, min(100.0, value))
 
     def _save_volume(self, value):
+        self._save_state(volume=round(value))
+
+    def _save_state(self, **values):
         CONF.mkdir(parents=True, exist_ok=True)
+        try:
+            data = json.loads(STATE_PATH.read_text())
+            if not isinstance(data, dict):
+                data = {}
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        data.update(values)
         tmp = STATE_PATH.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps({"volume": round(value)}))
+        tmp.write_text(json.dumps(data))
         tmp.replace(STATE_PATH)
 
     def on_close(self, *_args):
         self.closing = True
         try:
-            self.viz.stop()
+            if getattr(self, "viz", None) is not None:
+                self.viz.stop()
         except Exception:
             pass
         for proc in self.procs.values():
@@ -1710,11 +2468,11 @@ def check_tools():
 
 
 def main():
-    if "--winamp" in sys.argv:
-        os.environ["RTUBE_SKIN"] = "winamp"
+    if SKIN in ("winamp", "modern"):
+        os.environ["RTUBE_SKIN"] = SKIN
     if "--check-tools" in sys.argv:
         sys.exit(check_tools())
-    sys.exit(Rtube().run([a for a in sys.argv if a != "--winamp"]))
+    sys.exit(Rtube().run([a for a in sys.argv if a not in ("--winamp", "--modern")]))
 
 
 if __name__ == "__main__":

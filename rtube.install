@@ -1,5 +1,5 @@
 post_install() {
-  echo ">> Rtube installed / telepítve. Run / indítás: rtube   (Winamp skin / kinézet: rtube --winamp)"
+  echo ">> Rtube installed / telepítve. Run / indítás: rtube   (Winamp: rtube --winamp, Modern: rtube --modern)"
   echo ">> UI language follows the system (Hungarian/English); force with / kényszerítés: RTUBE_LANG=en|hu"
   echo ">> DMS bar widget (optional / opcionális):"
   echo "   mkdir -p ~/.config/DankMaterialShell/plugins && cp -r /usr/share/rtube/dms-plugin ~/.config/DankMaterialShell/plugins/rtube"

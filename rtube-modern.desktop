@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Rtube (Modern)
+Name[hu]=Rtube (Modern)
+GenericName=YouTube audio
+GenericName[hu]=YouTube hang
+Comment=Rtube with a clean, modern dark look and a compact mini-player
+Comment[hu]=Rtube letisztult, modern sötét kinézettel és kompakt mini-lejátszóval
+Exec=rtube --modern
+Icon=io.github.rtube.Rtube
+Terminal=false
+Categories=AudioVideo;Audio;Music;Player;
+Keywords=youtube;music;modern;rtube;
+Keywords[hu]=youtube;zene;modern;rtube;
+StartupWMClass=io.github.rtube.Rtube

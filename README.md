@@ -9,7 +9,8 @@
 | ![Rtube glass look](screenshots/glass.png) | ![Rtube Winamp skin](screenshots/winamp.png) |
 
 YouTube search that plays audio only. A GTK4 app for Arch Linux and Ubuntu / Linux Mint with a
-frosted-glass look and a classic Winamp skin, plus a small cava spectrum visualizer.
+frosted-glass look, a classic Winamp skin and a new modern dark skin with a compact
+mini-player, plus a small cava spectrum visualizer.
 
 > The app follows the system language (Hungarian or English). Force it with
 > `RTUBE_LANG=en` or `RTUBE_LANG=hu`, e.g. `RTUBE_LANG=en rtube`.
@@ -35,11 +36,11 @@ Optional extras: `mpv` (open the video), `cava` (spectrum visualizer).
 
 #### Ubuntu / Linux Mint
 
-Download `rtube_1.4.0-1_all.deb` from the [Releases](https://github.com/Mrkovi08/rtube/releases) page,
+Download `rtube_1.5.0-1_all.deb` from the [Releases](https://github.com/Mrkovi08/rtube/releases) page,
 then double-click it (Software Manager / App Center) or run:
 
 ```sh
-sudo apt install ./rtube_1.4.0-1_all.deb
+sudo apt install ./rtube_1.5.0-1_all.deb
 ```
 
 apt installs everything it needs automatically: Python GTK4 bindings, GStreamer
@@ -57,8 +58,27 @@ and yt-dlp is kept up to date automatically. Your own `~/.config/yt-dlp/config`
 
 - `rtube` – glass look
 - `rtube --winamp` – Winamp skin
+- `rtube --modern` – modern skin (new in 1.5.0)
 
-Both also appear in your application menu.
+All three also appear in your application menu ("Rtube", "Rtube (Winamp)", "Rtube (Modern)").
+
+### Modern skin
+
+| Full view | Compact mini-player |
+|:---:|:---:|
+| ![Rtube modern skin](screenshots/modern.png) | ![Rtube modern compact view](screenshots/modern-compact.png) |
+
+A clean, dark-grey look with a large "Now playing" card next to the results / favorites list.
+Start it with `rtube --modern`, from the "Rtube (Modern)" menu entry, or with `RTUBE_SKIN=modern rtube`.
+
+- **Compact mini-player:** the small button at the top right switches to a narrow player-only view
+  with an "Up next" strip at the bottom (click it to play the next song). The **List** button
+  brings the full view back. Rtube remembers the last view (`~/.config/rtube/state.json`).
+- Searching from the compact view switches back to the full list automatically.
+- The 🎬 (camera) button still opens the video separately in **mpv**.
+- No spectrum visualizer in this skin, so cava is not needed for it.
+- On Hyprland floating windows Rtube also resizes the window via `hyprctl`; on other desktops
+  the normal GTK window sizing is used.
 
 ### DMS bar widget (optional)
 
@@ -86,7 +106,8 @@ rm -rf ~/.local/share/rtube   # optional: downloaded yt-dlp / deno
 | ![Rtube üveges kinézet](screenshots/glass.png) | ![Rtube Winamp kinézet](screenshots/winamp.png) |
 
 YouTube kereső, ami csak a hangot játssza. GTK4 alkalmazás Arch Linuxra és Ubuntu / Linux Mintre,
-üveges és klasszikus Winamp kinézettel, kis cava spektrumkijelzővel.
+üveges, klasszikus Winamp és új, modern sötét kinézettel (kompakt mini-lejátszóval),
+kis cava spektrumkijelzővel.
 
 > Az alkalmazás a rendszer nyelvét követi (magyar vagy angol). Kényszeríteni a
 > `RTUBE_LANG=en` vagy `RTUBE_LANG=hu` változóval lehet, pl. `RTUBE_LANG=hu rtube`.
@@ -112,11 +133,11 @@ Választható extrák: `mpv` (videó megnyitása), `cava` (spektrum).
 
 #### Ubuntu / Linux Mint
 
-Töltsd le az `rtube_1.4.0-1_all.deb` fájlt a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról,
+Töltsd le az `rtube_1.5.0-1_all.deb` fájlt a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról,
 majd kattints rá duplán (Szoftverkezelő / App Center), vagy:
 
 ```sh
-sudo apt install ./rtube_1.4.0-1_all.deb
+sudo apt install ./rtube_1.5.0-1_all.deb
 ```
 
 Az apt magától felrak mindent, ami kell: a Python GTK4 csatolókat, a GStreamert
@@ -134,8 +155,27 @@ Ez a saját felhasználói fiókodban történik, sudo nélkül; az állapotsor 
 
 - `rtube` – üveges kinézet
 - `rtube --winamp` – Winamp kinézet
+- `rtube --modern` – modern kinézet (új az 1.5.0-ban)
 
-Mindkettő megtalálható az alkalmazásmenüben is.
+Mindhárom megtalálható az alkalmazásmenüben is („Rtube”, „Rtube (Winamp)”, „Rtube (Modern)”).
+
+### Modern kinézet
+
+| Teljes nézet | Kompakt mini-lejátszó |
+|:---:|:---:|
+| ![Rtube modern kinézet](screenshots/modern.png) | ![Rtube modern kompakt nézet](screenshots/modern-compact.png) |
+
+Letisztult, sötétszürke kinézet: a találatok / kedvencek listája mellett egy nagy „Most szól” kártya.
+Indítás: `rtube --modern`, az „Rtube (Modern)” menüpont, vagy `RTUBE_SKIN=modern rtube`.
+
+- **Kompakt mini-lejátszó:** a jobb felső kis gomb keskeny, csak lejátszós nézetre vált, alul egy
+  „Következő” sávval (rákattintva a következő szám indul). A **Lista** gomb visszahozza a teljes
+  nézetet. Az Rtube megjegyzi az utolsó nézetet (`~/.config/rtube/state.json`).
+- Ha a kompakt nézetben keresel, magától visszavált a teljes listára.
+- A 🎬 (kamera) gomb továbbra is külön, **mpv**-ben nyitja meg a videót.
+- Ebben a kinézetben nincs spektrumkijelző, ehhez nem kell a cava.
+- Hyprlandon a lebegő ablakot `hyprctl`-lel is átméretezi; más asztali környezetben a
+  szokásos GTK ablakméretezés működik.
 
 ### DMS sáv widget (opcionális)
 
