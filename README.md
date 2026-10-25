@@ -28,7 +28,7 @@ makepkg -si
 Or download the ready-made package from the [Releases](https://github.com/Mrkovi08/rtube/releases) page and run:
 
 ```sh
-sudo pacman -U rtube-<version>-1-any.pkg.tar.zst
+cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.5.0/rtube-1.5.0-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.5.0-1-any.pkg.tar.zst
 ```
 
 pacman installs the required dependencies automatically (GTK4, GStreamer, yt-dlp...).
@@ -40,7 +40,7 @@ Download `rtube_1.5.0-1_all.deb` from the [Releases](https://github.com/Mrkovi08
 then double-click it (Software Manager / App Center) or run:
 
 ```sh
-sudo apt install ./rtube_1.5.0-1_all.deb
+cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.5.0/rtube_1.5.0-1_all.deb && sudo apt install ./rtube_1.5.0-1_all.deb
 ```
 
 apt installs everything it needs automatically: Python GTK4 bindings, GStreamer
@@ -125,7 +125,7 @@ makepkg -si
 Vagy töltsd le a kész csomagot a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról, és:
 
 ```sh
-sudo pacman -U rtube-<verzió>-1-any.pkg.tar.zst
+cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.5.0/rtube-1.5.0-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.5.0-1-any.pkg.tar.zst
 ```
 
 A pacman magától felrakja a szükséges függőségeket (GTK4, GStreamer, yt-dlp...).
@@ -137,7 +137,7 @@ Töltsd le az `rtube_1.5.0-1_all.deb` fájlt a [Releases](https://github.com/Mrk
 majd kattints rá duplán (Szoftverkezelő / App Center), vagy:
 
 ```sh
-sudo apt install ./rtube_1.5.0-1_all.deb
+cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.5.0/rtube_1.5.0-1_all.deb && sudo apt install ./rtube_1.5.0-1_all.deb
 ```
 
 Az apt magától felrak mindent, ami kell: a Python GTK4 csatolókat, a GStreamert
