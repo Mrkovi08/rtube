@@ -53,13 +53,6 @@ AUDIO_FORMAT = (
 )
 UA = "Mozilla/5.0"
 
-# Kinézet: RTUBE_SKIN=modern|winamp, vagy rtube --modern / --winamp
-SKIN = os.environ.get("RTUBE_SKIN", "").strip().lower()
-if "--modern" in sys.argv:
-    SKIN = "modern"
-elif "--winamp" in sys.argv:
-    SKIN = "winamp"
-MODERN = SKIN == "modern"
 # A modern kinézet saját SVG ikonjai ide kerülnek (felhasználói cache, csomagból telepítve is írható)
 ICON_DIR = Path(os.environ.get("XDG_CACHE_HOME") or HOME / ".cache") / "rtube/icons"
 
@@ -372,88 +365,6 @@ def build_css(p, radius):
     """
 
 
-WINAMP_CSS = """
-window, window.background {
-  background-color: #232333;
-  color: #00e600;
-  font-family: "DejaVu Sans Mono", monospace;
-}
-label { color: #00e600; font-family: "DejaVu Sans Mono", monospace; }
-label.brand {
-  color: #f0c000;
-  font-weight: 800;
-  letter-spacing: 3px;
-  text-shadow: 1px 1px #000000;
-}
-label.dim { color: #4fa64f; }
-.panel {
-  background-color: #000000;
-  border-radius: 0;
-  border-style: solid;
-  border-width: 2px;
-  border-color: #10101a #6a6a8a #6a6a8a #10101a;
-  box-shadow: 0 0 0 2px #3a3a50;
-}
-entry.search, entry.search:focus, entry.search:focus-visible {
-  background-color: #000000;
-  color: #00e600;
-  caret-color: #00e600;
-  border-radius: 0;
-  border-style: solid;
-  border-width: 2px;
-  border-color: #10101a #6a6a8a #6a6a8a #10101a;
-}
-button, button.accent, button.active-view, button.icon-btn {
-  background-image: linear-gradient(to bottom, #d6d6e0, #8a8a9c);
-  background-color: #b0b0c0;
-  color: #101018;
-  border-radius: 1px;
-  border-style: solid;
-  border-width: 1px;
-  border-color: #ffffff #3a3a48 #3a3a48 #ffffff;
-  font-weight: 700;
-}
-button label { color: #101018; }
-button:hover, button.accent:hover, button.icon-btn:hover {
-  background-image: linear-gradient(to bottom, #e8e8f0, #a0a0b4);
-}
-button:active, button.active-view {
-  background-image: linear-gradient(to bottom, #7a7a8c, #b8b8c8);
-  border-color: #3a3a48 #ffffff #ffffff #3a3a48;
-}
-button.play, button.play:hover {
-  background-image: linear-gradient(to bottom, #d6d6e0, #8a8a9c);
-  color: #101018;
-  border-radius: 1px;
-  border-style: solid;
-  border-width: 1px;
-  border-color: #ffffff #3a3a48 #3a3a48 #ffffff;
-}
-button.heart, button.heart label { background-image: none; background-color: transparent; border: none; color: #4fa64f; }
-button.heart.fav, button.heart.fav label { color: #f0c000; }
-button.icon-btn.fav, button.icon-btn.fav label { color: #c00000; }
-list row { border-radius: 0; }
-list row:hover { background-color: #0a2a0a; }
-list row.playing { background-color: #00309a; border-color: #00309a; }
-list row.playing label { color: #ffffff; }
-.cover-frame { background-color: #000000; border-radius: 0; }
-scale trough {
-  background-color: #000000;
-  border-radius: 0;
-  border-style: solid;
-  border-width: 1px;
-  border-color: #10101a #6a6a8a #6a6a8a #10101a;
-}
-scale highlight { background-image: linear-gradient(to right, #00a000, #e0e000, #e08000); background-color: #00c000; border-radius: 0; }
-scale slider {
-  background-image: linear-gradient(to bottom, #d6d6e0, #8a8a9c);
-  border-radius: 1px;
-  min-width: 14px;
-  border: 1px solid #3a3a48;
-}
-"""
-
-
 MODERN_CSS = """
 window, window.background {
   background-color: #1c1c1f;
@@ -676,16 +587,6 @@ def fmt_time(seconds):
     if hours:
         return f"{hours}:{minutes:02d}:{secs:02d}"
     return f"{minutes}:{secs:02d}"
-
-
-def subtitle(track):
-    bits = []
-    if track.get("channel"):
-        bits.append(track["channel"])
-    dur = fmt_time(track.get("duration"))
-    if dur != "—":
-        bits.append(dur)
-    return " · ".join(bits) if bits else "YouTube"
 
 
 def norm_duration(value):
@@ -948,29 +849,6 @@ def ensure_tools(status=lambda _msg: None, allow_download=True):
     return TOOLS
 
 
-def cava_version():
-    out = _tool_version("cava", ("-v",)) or ""
-    m = re.search(r"(\d+)\.(\d+)", out)
-    return (int(m.group(1)), int(m.group(2))) if m else None
-
-
-def cava_inputs():
-    """cava 0.9+ natív pipewire, régebbi (pl. Ubuntu 24.04: 0.7.4) pulse; RTUBE_CAVA_INPUT felülír."""
-    forced = os.environ.get("RTUBE_CAVA_INPUT", "").strip()
-    if forced:
-        return [forced]
-    ver = cava_version()
-    if ver is None:
-        # Egyes disztró buildek (pl. Ubuntu) üres verziót írnak ki: a binárisban keresünk
-        try:
-            ver = (0, 9) if b"pipewire" in Path(shutil.which("cava")).read_bytes() else (0, 8)
-        except (OSError, TypeError):
-            ver = (0, 8)
-    if ver >= (0, 9):
-        return ["pipewire", "pulse"]
-    return ["pulse", "pipewire"]
-
-
 def stop_proc(proc):
     if proc is None or proc.poll() is not None:
         return
@@ -1187,123 +1065,6 @@ class Player:
                 self.on_phase("paused")
 
 
-class Visualizer(Gtk.DrawingArea):
-    """Kis cava spektrum a lejátszóba."""
-
-    BARS = 40
-
-    def __init__(self, winamp=False):
-        super().__init__()
-        self.winamp = winamp
-        self.levels = [0] * self.BARS
-        self.proc = None
-        self.method = None
-        self.stopped = False
-        self.set_content_height(34 if winamp else 30)
-        self.set_hexpand(True)
-        self.set_draw_func(self._draw)
-        self._start()
-
-    def _start(self):
-        if not shutil.which("cava"):
-            return
-        threading.Thread(target=self._launch, daemon=True).start()
-
-    def _launch(self):
-        cfg = CONF / "cava.conf"
-        for method in cava_inputs():
-            try:
-                CONF.mkdir(parents=True, exist_ok=True)
-                cfg.write_text(
-                    "[general]\n"
-                    f"bars = {self.BARS}\n"
-                    "framerate = 30\n"
-                    "[input]\n"
-                    f"method = {method}\n"
-                    "source = auto\n"
-                    "[output]\n"
-                    "method = raw\n"
-                    "raw_target = /dev/stdout\n"
-                    "data_format = ascii\n"
-                    "ascii_max_range = 100\n"
-                    "bar_delimiter = 59\n"
-                    "frame_delimiter = 10\n"
-                )
-                proc = subprocess.Popen(
-                    ["cava", "-p", str(cfg)],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                )
-            except Exception:
-                continue
-            try:
-                proc.wait(timeout=1.5)  # azonnal kilép, ha ez a bemenet nem megy
-            except subprocess.TimeoutExpired:
-                if self.stopped:
-                    proc.terminate()
-                    return
-                self.proc = proc
-                self.method = method
-                self._reader()
-                return
-
-    def _reader(self):
-        proc = self.proc
-        for line in proc.stdout:
-            vals = []
-            for part in line.strip().split(";"):
-                if part:
-                    try:
-                        vals.append(int(part))
-                    except ValueError:
-                        pass
-            if vals:
-                GLib.idle_add(self._update, vals)
-
-    def _update(self, vals):
-        self.levels = vals[: self.BARS]
-        self.queue_draw()
-        return False
-
-    def _draw(self, _area, cr, width, height):
-        n = max(len(self.levels), 1)
-        gap = 2
-        bw = max((width - gap * (n - 1)) / n, 1)
-        if self.winamp:
-            cr.set_source_rgb(0, 0, 0)
-            cr.rectangle(0, 0, width, height)
-            cr.fill()
-        for i, lvl in enumerate(self.levels):
-            h = max(height * lvl / 100.0, 1)
-            x = i * (bw + gap)
-            if self.winamp:
-                # Winamp: zöldből sárgán át pirosba, kis "pixel" szegmensekkel
-                seg = 3
-                y = height
-                while y > height - h:
-                    frac = (height - y) / height
-                    if frac < 0.5:
-                        cr.set_source_rgb(frac * 2 * 0.9, 0.85, 0.0)
-                    else:
-                        cr.set_source_rgb(0.9, 0.85 * (1 - (frac - 0.5) * 2), 0.0)
-                    cr.rectangle(x, y - seg + 1, bw, seg - 1)
-                    cr.fill()
-                    y -= seg
-            else:
-                cr.set_source_rgba(0.23, 0.53, 1.0, 0.85)
-                cr.rectangle(x, height - h, bw, h)
-                cr.fill()
-
-    def stop(self):
-        self.stopped = True
-        if self.proc and self.proc.poll() is None:
-            try:
-                self.proc.terminate()
-            except Exception:
-                pass
-
-
 class Rtube(Gtk.Application):
     def __init__(self):
         super().__init__(
@@ -1369,165 +1130,14 @@ class Rtube(Gtk.Application):
 
     def _build(self):
         provider = Gtk.CssProvider()
-        css = build_css(self.palette, self.radius)
-        if SKIN == "winamp":
-            css += WINAMP_CSS
-        if MODERN:
-            css += MODERN_CSS
-            load_css(provider, css)
-            Gtk.StyleContext.add_provider_for_display(
-                Gdk.Display.get_default(),
-                provider,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-            )
-            self._build_modern()
-            return
-        load_css(provider, css)
+        load_css(provider, build_css(self.palette, self.radius) + MODERN_CSS)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
             provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
-        self.win = Gtk.ApplicationWindow(application=self, title="Rtube")
-        self.win.set_default_size(960, 680)
-        self.win.set_size_request(720, 480)
-        self.win.connect("close-request", self.on_close)
+        self._build_modern()
 
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        root.set_margin_top(16)
-        root.set_margin_bottom(16)
-        root.set_margin_start(16)
-        root.set_margin_end(16)
-
-        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        brand = Gtk.Label(label="Rtube")
-        brand.add_css_class("brand")
-        brand.set_valign(Gtk.Align.CENTER)
-        self.entry = Gtk.Entry()
-        self.entry.set_placeholder_text(tr("YouTube keresés…"))
-        self.entry.add_css_class("search")
-        self.entry.set_hexpand(True)
-        self.entry.connect("activate", self.search_now)
-        self.entry.connect("changed", self.search_later)
-        search_btn = Gtk.Button(label=tr("Keresés"))
-        search_btn.add_css_class("accent")
-        search_btn.connect("clicked", self.search_now)
-        self.fav_btn = Gtk.Button(label=tr("Kedvencek"))
-        self.fav_btn.connect("clicked", self.on_favs)
-        top.append(brand)
-        top.append(self.entry)
-        top.append(search_btn)
-        top.append(self.fav_btn)
-
-        self.status = Gtk.Label(label=tr("Keress egy számra, vagy nyisd meg a kedvenceket."), xalign=0)
-        self.status.add_css_class("dim")
-        self.status.set_ellipsize(Pango.EllipsizeMode.END)
-
-        list_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        list_card.add_css_class("panel")
-        list_card.set_vexpand(True)
-        self.list = Gtk.ListBox()
-        self.list.set_selection_mode(Gtk.SelectionMode.NONE)
-        self.list.connect("row-activated", self.on_row)
-        scroll = BoundScroll()
-        scroll.set_child(self.list)
-        self.empty = Gtk.Label(label=tr("Keress egy számra."))
-        self.empty.add_css_class("dim")
-        self.empty.set_wrap(True)
-        self.empty.set_vexpand(True)
-        self.empty.set_valign(Gtk.Align.CENTER)
-        self.stack = Gtk.Stack()
-        self.stack.set_vexpand(True)
-        self.stack.add_named(scroll, "list")
-        self.stack.add_named(self.empty, "empty")
-        self.stack.set_visible_child_name("empty")
-        list_card.append(self.stack)
-
-        player_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        player_card.add_css_class("panel")
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        np_frame, self.np_pic = self._cover(96)
-        meta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        meta.set_hexpand(True)
-        meta.set_valign(Gtk.Align.CENTER)
-        self.np_title = Gtk.Label(label=tr("Nincs lejátszás"), xalign=0)
-        self.np_title.add_css_class("title")
-        self.np_title.set_hexpand(True)
-        self.np_title.set_ellipsize(Pango.EllipsizeMode.END)
-        self.np_sub = Gtk.Label(label=tr("Válassz egy számot"), xalign=0)
-        self.np_sub.add_css_class("dim")
-        self.np_sub.set_hexpand(True)
-        self.np_sub.set_ellipsize(Pango.EllipsizeMode.END)
-        meta.append(self.np_title)
-        meta.append(self.np_sub)
-        self.vol = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
-        self.vol.set_draw_value(False)
-        self.vol.set_tooltip_text(tr("Hangerő"))
-        self.vol.set_size_request(120, -1)
-        self.vol.set_valign(Gtk.Align.CENTER)
-        self._ui = True
-        self.vol.set_value(self.volume)
-        self._ui = False
-        self.vol.connect("value-changed", self.on_volume)
-
-        # ---- MPV GOMB HOZZÁADÁSA ----
-        self.video_btn = Gtk.Button(label="🎬")
-        self.video_btn.add_css_class("icon-btn")
-        self.video_btn.set_tooltip_text(tr("Megnyitás videóként (mpv)"))
-        self.video_btn.set_valign(Gtk.Align.CENTER)
-        self.video_btn.set_sensitive(False)
-        self.video_btn.connect("clicked", self.on_video)
-
-        self.np_heart = Gtk.Button(label="♡")
-        self.np_heart.add_css_class("icon-btn")
-        self.np_heart.set_valign(Gtk.Align.CENTER)
-        self.np_heart.connect("clicked", self.on_np_heart)
-        
-        self.play_btn = Gtk.Button(label="▶")
-        self.play_btn.add_css_class("play")
-        self.play_btn.add_css_class("player-btn")
-        self.play_btn.set_valign(Gtk.Align.CENTER)
-        self.play_btn.set_sensitive(False)
-        self.play_btn.connect("clicked", self.on_play)
-        
-        row.append(np_frame)
-        row.append(meta)
-        row.append(self.vol)
-        row.append(self.video_btn)
-        row.append(self.np_heart)
-        row.append(self.play_btn)
-
-        seek_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.pos_label = Gtk.Label(label="0:00")
-        self.pos_label.add_css_class("dim")
-        self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, 1)
-        self.scale.set_draw_value(False)
-        self.scale.set_hexpand(True)
-        self.scale.connect("value-changed", self.on_seek)
-        self.dur_label = Gtk.Label(label="0:00")
-        self.dur_label.add_css_class("dim")
-        seek_row.append(self.pos_label)
-        seek_row.append(self.scale)
-        seek_row.append(self.dur_label)
-
-        player_card.append(row)
-        self.viz = Visualizer(winamp=SKIN == "winamp")
-        player_card.append(self.viz)
-        player_card.append(seek_row)
-        if SKIN == "winamp":
-            # Winamp elrendezés: felül a lejátszó, alatta a kereső és a lista
-            root.append(player_card)
-            root.append(top)
-            root.append(self.status)
-            root.append(list_card)
-        else:
-            root.append(top)
-            root.append(self.status)
-            root.append(list_card)
-            root.append(player_card)
-        self.win.set_child(root)
-
-    # ---- MODERN SKIN (RTUBE_SKIN=modern) ----
     def _icon_button(self, icon, text, css_classes):
         btn = Gtk.Button()
         for cls in css_classes:
@@ -1543,7 +1153,6 @@ class Rtube(Gtk.Application):
 
     def _build_modern(self):
         self.heart_icons = ensure_heart_icons()
-        self.viz = None
         self.win = Gtk.ApplicationWindow(application=self, title="Rtube")
         self.win.set_default_size(960, 680)
         self.win.set_size_request(760, 600)
@@ -1886,7 +1495,7 @@ class Rtube(Gtk.Application):
         self.search_now()
 
     def _update_upnext(self):
-        if not MODERN or not hasattr(self, "upnext"):
+        if not hasattr(self, "upnext"):
             return
         rows = []
         index = 0
@@ -1923,18 +1532,15 @@ class Rtube(Gtk.Application):
         return "compact" if value == "compact" else "full"
 
     def _set_play_icon(self, playing):
-        if MODERN:
-            own = getattr(self, "heart_icons", False)
-            if playing:
-                name = "rtube-pause-symbolic" if own else "media-playback-pause-symbolic"
-            else:
-                name = "rtube-play-symbolic" if own else "media-playback-start-symbolic"
-            self.play_btn.set_icon_name(name)
+        own = getattr(self, "heart_icons", False)
+        if playing:
+            name = "rtube-pause-symbolic" if own else "media-playback-pause-symbolic"
         else:
-            self.play_btn.set_label("⏸" if playing else "▶")
+            name = "rtube-play-symbolic" if own else "media-playback-start-symbolic"
+        self.play_btn.set_icon_name(name)
 
     def _set_heart(self, button, on):
-        if MODERN and getattr(self, "heart_icons", False):
+        if getattr(self, "heart_icons", False):
             button.set_icon_name(
                 "rtube-heart-filled-symbolic" if on else "rtube-heart-outline-symbolic"
             )
@@ -1946,8 +1552,6 @@ class Rtube(Gtk.Application):
             button.remove_css_class("fav")
 
     def _sync_seg(self):
-        if not MODERN:
-            return
         favs = self.mode == "favs"
         if favs:
             self.results_btn.remove_css_class("active-view")
@@ -1958,8 +1562,6 @@ class Rtube(Gtk.Application):
         self.list_title.set_text(T("Kedvencek", "Favorites") if favs else T("Találatok", "Results"))
 
     def _sync_vol_icon(self, value):
-        if not MODERN:
-            return
         if value <= 0:
             name = "audio-volume-muted-symbolic"
         elif value < 34:
@@ -1971,9 +1573,7 @@ class Rtube(Gtk.Application):
         self.vol_icon.set_from_icon_name(name)
 
     def _np_subtitle(self, track):
-        if MODERN:
-            return track.get("channel") or "YouTube"
-        return subtitle(track)
+        return track.get("channel") or "YouTube"
 
     def _cover(self, size):
         frame = Gtk.Box()
@@ -2090,17 +1690,16 @@ class Rtube(Gtk.Application):
             for track in tracks:
                 self.list.append(self.make_row(track))
             self.stack.set_visible_child_name("list")
-        if MODERN:
-            self.list_count.set_text(
-                T(f"{len(tracks)} szám", f"{len(tracks)} songs") if tracks else ""
-            )
+        self.list_count.set_text(
+            T(f"{len(tracks)} szám", f"{len(tracks)} songs") if tracks else ""
+        )
         self.mark_playing()
 
     def make_row(self, track):
         row = Gtk.ListBoxRow()
         row.track = track
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        frame, pic = self._cover(44 if MODERN else 72)
+        frame, pic = self._cover(44)
         self.queue_thumb(track, pic)
         texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         texts.set_hexpand(True)
@@ -2109,7 +1708,7 @@ class Rtube(Gtk.Application):
         title.add_css_class("title")
         title.set_hexpand(True)
         title.set_ellipsize(Pango.EllipsizeMode.END)
-        sub = Gtk.Label(label=subtitle(track), xalign=0)
+        sub = Gtk.Label(label=track.get("channel") or "YouTube", xalign=0)
         sub.add_css_class("dim")
         sub.set_hexpand(True)
         sub.set_ellipsize(Pango.EllipsizeMode.END)
@@ -2123,11 +1722,9 @@ class Rtube(Gtk.Application):
         row.heart = heart
         box.append(frame)
         box.append(texts)
-        if MODERN:
-            sub.set_text(track.get("channel") or "YouTube")
-            dur = Gtk.Label(label=fmt_time(track.get("duration")), xalign=1)
-            dur.add_css_class("time")
-            box.append(dur)
+        dur = Gtk.Label(label=fmt_time(track.get("duration")), xalign=1)
+        dur.add_css_class("time")
+        box.append(dur)
         box.append(heart)
         row.set_child(box)
         return row
@@ -2443,11 +2040,6 @@ class Rtube(Gtk.Application):
 
     def on_close(self, *_args):
         self.closing = True
-        try:
-            if getattr(self, "viz", None) is not None:
-                self.viz.stop()
-        except Exception:
-            pass
         for proc in self.procs.values():
             stop_proc(proc)
         try:
@@ -2459,20 +2051,17 @@ class Rtube(Gtk.Application):
 
 
 def check_tools():
-    """rtube --check-tools: kiírja, mit választ (yt-dlp, JS futtatókörnyezet, cava bemenet)."""
+    """rtube --check-tools: kiírja, mit választ (yt-dlp, JS futtatókörnyezet)."""
     ensure_tools(print, allow_download="--no-download" not in sys.argv)
     print(f"yt-dlp: {TOOLS['ytdlp']} ({TOOLS.get('ytdlp_version')})")
     print(f"yt-dlp extra args: {' '.join(ytdlp_extra_args()) or '-'}")
-    print(f"cava: {shutil.which('cava') or '-'} version={cava_version()} inputs={cava_inputs()}")
     return 0
 
 
 def main():
-    if SKIN in ("winamp", "modern"):
-        os.environ["RTUBE_SKIN"] = SKIN
     if "--check-tools" in sys.argv:
         sys.exit(check_tools())
-    sys.exit(Rtube().run([a for a in sys.argv if a not in ("--winamp", "--modern")]))
+    sys.exit(Rtube().run([a for a in sys.argv if a != "--modern"]))
 
 
 if __name__ == "__main__":
