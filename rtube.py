@@ -605,18 +605,28 @@ def themed_css(css, dark=True):
     return _COLOR_RE.sub(lambda m: LIGHT_COLORS.get(m.group(0), m.group(0)), css)
 
 
-def detect_system_dark():
-    """Az asztal sötét/világos beállítása (GTK 4.20+ színséma, különben a téma neve)."""
+SCHEME_DARK, SCHEME_LIGHT = 2, 3  # Gtk.InterfaceColorScheme értékei
+
+
+def read_color_scheme():
+    """GTK 4.20+ színséma: 0 = nem támogatott, 1 = nincs preferencia, 2 = sötét, 3 = világos."""
+    settings = Gtk.Settings.get_default()
+    try:
+        return int(settings.get_property("gtk-interface-color-scheme"))
+    except (AttributeError, TypeError, ValueError):
+        return 0
+
+
+def detect_system_dark(scheme=None):
+    """Az asztal sötét/világos beállítása (színséma, különben a GTK téma neve)."""
     settings = Gtk.Settings.get_default()
     if settings is None:
         return True
-    try:
-        scheme = int(settings.get_property("gtk-interface-color-scheme"))
-    except (TypeError, ValueError):
-        scheme = 0
-    if scheme == 1:
+    if scheme is None:
+        scheme = read_color_scheme()
+    if scheme == SCHEME_DARK:
         return True
-    if scheme == 2:
+    if scheme == SCHEME_LIGHT:
         return False
     name = str(settings.get_property("gtk-theme-name") or "").lower()
     return "dark" in name or not name
@@ -1221,6 +1231,8 @@ class Rtube(Gtk.Application):
     def _build(self):
         self.css_provider = Gtk.CssProvider()
         self.theme_buttons = []
+        self._setting_scheme = False
+        self.system_scheme = read_color_scheme()  # az asztal értéke, mielőtt felülírnánk
         self._apply_theme()
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
@@ -1246,14 +1258,24 @@ class Rtube(Gtk.Application):
 
     def _is_dark(self):
         if self.theme_mode == "auto":
-            return detect_system_dark()
+            return detect_system_dark(self.system_scheme)
         return self.theme_mode == "dark"
 
     def _apply_theme(self):
         dark = self._is_dark()
         settings = Gtk.Settings.get_default()
         if settings is not None:
-            settings.set_property("gtk-application-prefer-dark-theme", dark)
+            self._setting_scheme = True
+            try:
+                if read_color_scheme() != 0:
+                    settings.set_property(
+                        "gtk-interface-color-scheme", SCHEME_DARK if dark else SCHEME_LIGHT
+                    )
+                else:  # régebbi GTK: nincs színséma tulajdonság
+                    settings.set_property("gtk-application-prefer-dark-theme", dark)
+            except TypeError:
+                pass
+            self._setting_scheme = False
         load_css(
             self.css_provider,
             themed_css(build_css(self.palette, self.radius) + MODERN_CSS, dark),
@@ -1262,7 +1284,10 @@ class Rtube(Gtk.Application):
             self._sync_theme_button(btn)
 
     def _on_system_theme(self, *_args):
-        if self.theme_mode == "auto" and not self.closing:
+        if self._setting_scheme or self.closing:
+            return  # a saját átállításunk, nem az asztalé
+        self.system_scheme = read_color_scheme()
+        if self.theme_mode == "auto":
             self._apply_theme()
 
     def _theme_button(self, css_class):

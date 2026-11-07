@@ -193,12 +193,16 @@ class Theme(unittest.TestCase):
         return types.SimpleNamespace(get_property=lambda key: props[key])
 
     def test_system_theme_detection(self):
-        cases = [(1, "Adwaita", True), (2, "Adwaita-dark", False),
-                 (0, "Adwaita-dark", True), (0, "Adwaita", False), (0, "", True)]
+        cases = [(2, "Adwaita", True), (3, "Adwaita-dark", False),
+                 (1, "Adwaita-dark", True), (1, "Adwaita", False), (0, "", True)]
         for scheme, name, expected in cases:
             with mock.patch.object(rt.Gtk.Settings, "get_default",
                                    return_value=self.settings_stub(scheme, name)):
                 self.assertEqual(rt.detect_system_dark(), expected, (scheme, name))
+
+    def test_scheme_constants_match_gtk(self):
+        self.assertEqual(rt.SCHEME_DARK, int(rt.Gtk.InterfaceColorScheme.DARK))
+        self.assertEqual(rt.SCHEME_LIGHT, int(rt.Gtk.InterfaceColorScheme.LIGHT))
 
     def test_theme_button_cycles_and_saves(self):
         saved, applied = [], []
