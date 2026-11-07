@@ -170,5 +170,65 @@ class PlaybackFallback(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+class Theme(unittest.TestCase):
+    def test_dark_css_is_unchanged(self):
+        self.assertEqual(rt.themed_css(rt.MODERN_CSS, dark=True), rt.MODERN_CSS)
+
+    def test_every_mapped_color_exists_in_the_stylesheet(self):
+        for dark_color in rt.LIGHT_COLORS:
+            self.assertIn(dark_color, rt.MODERN_CSS, dark_color)
+
+    def test_light_css_has_no_dark_surface_colors_left(self):
+        light = rt.themed_css(rt.MODERN_CSS, dark=False)
+        for dark_only in ("#232327", "#ededf0", "#2a2a2f", "#323238"):
+            self.assertNotIn(dark_only, light)
+        self.assertIn("background-color: #f4f4f6;", light)  # window background
+        self.assertIn("color: #1c1c1f;", light)  # text
+
+    def test_unknown_colors_are_left_alone(self):
+        self.assertEqual(rt.themed_css("a { color: #123456; }", dark=False), "a { color: #123456; }")
+
+    def settings_stub(self, scheme, name):
+        props = {"gtk-interface-color-scheme": scheme, "gtk-theme-name": name}
+        return types.SimpleNamespace(get_property=lambda key: props[key])
+
+    def test_system_theme_detection(self):
+        cases = [(1, "Adwaita", True), (2, "Adwaita-dark", False),
+                 (0, "Adwaita-dark", True), (0, "Adwaita", False), (0, "", True)]
+        for scheme, name, expected in cases:
+            with mock.patch.object(rt.Gtk.Settings, "get_default",
+                                   return_value=self.settings_stub(scheme, name)):
+                self.assertEqual(rt.detect_system_dark(), expected, (scheme, name))
+
+    def test_theme_button_cycles_and_saves(self):
+        saved, applied = [], []
+        app = types.SimpleNamespace(
+            theme_mode="dark",
+            _save_state=lambda **kw: saved.append(kw),
+            _apply_theme=lambda: applied.append(1),
+        )
+        seen = []
+        for _ in range(4):
+            rt.Rtube._on_theme_click(app)
+            seen.append(app.theme_mode)
+        self.assertEqual(seen, ["light", "auto", "dark", "light"])
+        self.assertEqual(saved[0], {"theme": "light"})
+        self.assertEqual(len(applied), 4)
+
+    def test_load_theme_from_state_file(self):
+        import json, tempfile
+        app = types.SimpleNamespace()
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / "state.json"
+            with mock.patch.object(rt, "STATE_PATH", state):
+                self.assertEqual(rt.Rtube._load_theme(app), "dark")  # no file
+                state.write_text(json.dumps({"theme": "light"}))
+                self.assertEqual(rt.Rtube._load_theme(app), "light")
+                state.write_text(json.dumps({"theme": "neon"}))
+                self.assertEqual(rt.Rtube._load_theme(app), "dark")  # invalid value
+                state.write_text("not json")
+                self.assertEqual(rt.Rtube._load_theme(app), "dark")
+
+
 if __name__ == "__main__":
     unittest.main()

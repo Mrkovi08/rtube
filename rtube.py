@@ -570,6 +570,58 @@ button.upnext-up:hover { background-color: #2a2a2f; color: #ededf0; }
 """
 
 
+# Világos téma: a modern kinézet sötét színeinek egy-az-egyben megfelelői
+THEME_MODES = ("dark", "light", "auto")
+LIGHT_COLORS = {
+    "#1c1c1f": "#f4f4f6",  # ablak háttér
+    "#232327": "#ffffff",  # kártyák, keresőmező
+    "#2a2a2f": "#e9e9ee",  # gomb hover
+    "#323238": "#dedee5",  # aktív szegmens
+    "#ededf0": "#1c1c1f",  # fő szöveg
+    "#9a9aa3": "#5d5d67",  # másodlagos szöveg
+    "#6b6b74": "#80808a",  # halvány szöveg
+    "#5b8cff": "#3d6fe6",  # kiemelő kék
+    "#7aa2ff": "#2a58c8",  # kiemelő kék (hover / szöveg)
+    "#0f1422": "#ffffff",  # szöveg a kék alapon
+    "#2a2550": "#d9defa",  # borító helyettesítő színátmenet
+    "#151526": "#b9c3f2",
+    "rgba(255, 255, 255, 0.07)": "rgba(0, 0, 0, 0.09)",  # keretek
+    "rgba(255, 255, 255, 0.035)": "rgba(0, 0, 0, 0.04)",
+    "rgba(91, 140, 255, 0.55)": "rgba(61, 111, 230, 0.55)",
+    "rgba(91, 140, 255, 0.35)": "rgba(61, 111, 230, 0.35)",
+    "rgba(91, 140, 255, 0.28)": "rgba(61, 111, 230, 0.28)",
+    "rgba(91, 140, 255, 0.14)": "rgba(61, 111, 230, 0.14)",
+    "rgba(0, 0, 0, 0.5)": "rgba(0, 0, 0, 0.25)",  # árnyékok
+    "rgba(0, 0, 0, 0.45)": "rgba(0, 0, 0, 0.18)",
+    "rgba(0, 0, 0, 0.25)": "rgba(0, 0, 0, 0.10)",
+}
+_COLOR_RE = re.compile(r"#[0-9a-fA-F]{6}\b|rgba\([^)]*\)")
+
+
+def themed_css(css, dark=True):
+    """A sötét stíluslapból világosat csinál (a színek egy-az-egyben cseréjével)."""
+    if dark:
+        return css
+    return _COLOR_RE.sub(lambda m: LIGHT_COLORS.get(m.group(0), m.group(0)), css)
+
+
+def detect_system_dark():
+    """Az asztal sötét/világos beállítása (GTK 4.20+ színséma, különben a téma neve)."""
+    settings = Gtk.Settings.get_default()
+    if settings is None:
+        return True
+    try:
+        scheme = int(settings.get_property("gtk-interface-color-scheme"))
+    except (TypeError, ValueError):
+        scheme = 0
+    if scheme == 1:
+        return True
+    if scheme == 2:
+        return False
+    name = str(settings.get_property("gtk-theme-name") or "").lower()
+    return "dark" in name or not name
+
+
 def load_css(provider, css):
     """GTK 4.12+: load_from_string; régebbi GTK 4-en load_from_data."""
     if hasattr(provider, "load_from_string"):
@@ -1130,6 +1182,7 @@ class Rtube(Gtk.Application):
         Gtk.Window.set_default_icon_name(APP_ID)
         self.palette = load_palette()
         self.radius = load_radius()
+        self.theme_mode = self._load_theme()
         self.pool = ThreadPoolExecutor(max_workers=4)
         self.procs = {"search": None, "resolve": None}
         self.proc_lock = threading.Lock()
@@ -1166,14 +1219,78 @@ class Rtube(Gtk.Application):
         return False
 
     def _build(self):
-        provider = Gtk.CssProvider()
-        load_css(provider, build_css(self.palette, self.radius) + MODERN_CSS)
+        self.css_provider = Gtk.CssProvider()
+        self.theme_buttons = []
+        self._apply_theme()
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
-            provider,
+            self.css_provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
+        settings = Gtk.Settings.get_default()
+        if settings is not None:  # „Rendszer” módban az asztal váltását követjük
+            for prop in ("gtk-interface-color-scheme", "gtk-theme-name"):
+                try:
+                    settings.connect(f"notify::{prop}", self._on_system_theme)
+                except TypeError:
+                    pass
         self._build_modern()
+
+    # ---- Téma: sötét / világos / rendszer ----
+    def _load_theme(self):
+        try:
+            value = json.loads(STATE_PATH.read_text()).get("theme", "dark")
+        except (OSError, json.JSONDecodeError, AttributeError):
+            return "dark"
+        return value if value in THEME_MODES else "dark"
+
+    def _is_dark(self):
+        if self.theme_mode == "auto":
+            return detect_system_dark()
+        return self.theme_mode == "dark"
+
+    def _apply_theme(self):
+        dark = self._is_dark()
+        settings = Gtk.Settings.get_default()
+        if settings is not None:
+            settings.set_property("gtk-application-prefer-dark-theme", dark)
+        load_css(
+            self.css_provider,
+            themed_css(build_css(self.palette, self.radius) + MODERN_CSS, dark),
+        )
+        for btn in getattr(self, "theme_buttons", []):
+            self._sync_theme_button(btn)
+
+    def _on_system_theme(self, *_args):
+        if self.theme_mode == "auto" and not self.closing:
+            self._apply_theme()
+
+    def _theme_button(self, css_class):
+        btn = Gtk.Button()
+        btn.add_css_class(css_class)
+        btn.set_valign(Gtk.Align.CENTER)
+        btn.connect("clicked", self._on_theme_click)
+        self.theme_buttons.append(btn)
+        self._sync_theme_button(btn)
+        return btn
+
+    def _sync_theme_button(self, btn):
+        glyph, hu, en = {
+            "dark": ("☾", "Sötét", "Dark"),
+            "light": ("☀", "Világos", "Light"),
+            "auto": ("◐", "Rendszer", "System"),
+        }[self.theme_mode]
+        btn.set_label(glyph)
+        btn.set_tooltip_text(T(f"Téma: {hu} (kattints a váltáshoz)", f"Theme: {en} (click to change)"))
+
+    def _on_theme_click(self, *_args):
+        order = THEME_MODES
+        self.theme_mode = order[(order.index(self.theme_mode) + 1) % len(order)]
+        try:
+            self._save_state(theme=self.theme_mode)
+        except OSError:
+            pass
+        self._apply_theme()
 
     def _icon_button(self, icon, text, css_classes):
         btn = Gtk.Button()
@@ -1245,6 +1362,7 @@ class Rtube(Gtk.Application):
         top.append(self.entry)
         top.append(seg)
         top.append(self.compact_btn)
+        top.append(self._theme_button("compact-btn"))
         self.m_brand_label = brand_label
         self.m_seg = seg
 
@@ -1303,6 +1421,8 @@ class Rtube(Gtk.Application):
         self.full_btn.set_valign(Gtk.Align.CENTER)
         self.full_btn.connect("clicked", lambda *_a: self._set_view("full"))
         np_head.append(self.full_btn)
+        self.np_theme_btn = self._theme_button("np-head-btn")
+        np_head.append(self.np_theme_btn)
         np_frame, self.np_pic = self._cover(256)
         np_frame.add_css_class("np-cover")
         np_frame.set_margin_top(18)
@@ -1482,6 +1602,7 @@ class Rtube(Gtk.Application):
         self.m_brand_label.set_visible(not compact)
         self.compact_btn.set_visible(not compact)
         self.full_btn.set_visible(compact)
+        self.np_theme_btn.set_visible(compact)
         self.np_card.set_hexpand(compact)
         self.np_card.set_size_request(-1 if compact else 332, -1)
         # Csempézett (tiled) ablakban is keskeny, középre igazított oszlop maradjon

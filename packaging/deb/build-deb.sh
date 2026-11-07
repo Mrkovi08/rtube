@@ -2,7 +2,7 @@
 # Build the Ubuntu / Linux Mint package: packaging/deb/build-deb.sh [outdir]
 # Needs only dpkg-deb (no root: --root-owner-group). Output: rtube_<ver>-<rel>_all.deb
 set -eu
-VERSION=1.6.1
+VERSION=1.7.0
 RELEASE=1
 TOP=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=${1:-$TOP/dist}
@@ -37,9 +37,8 @@ DATE=$(date -R -d "@${SOURCE_DATE_EPOCH:-$(git -C "$TOP" log -1 --format=%ct 2>/
 cat > "$WORK/changelog" <<EOF
 rtube ($VERSION-$RELEASE) noble; urgency=medium
 
-  * Playback failures (HTTP 403 from YouTube) are retried automatically with
-    another YouTube client; a "Repair" button updates yt-dlp and the JS
-    runtime and retries the song.
+  * New dark / light / system theme button (the choice is remembered).
+  * Add the MIT license and unit tests.
 
  -- Mrkovi08 <Mrkovi08@users.noreply.github.com>  $DATE
 EOF
@@ -60,8 +59,8 @@ Section: sound
 Priority: optional
 Homepage: https://github.com/Mrkovi08/rtube
 Description: YouTube audio-only search and player (GTK4)
- Rtube searches YouTube and plays only the audio, with a modern dark look
- and a compact mini-player.
+ Rtube searches YouTube and plays only the audio, with a modern look (dark,
+ light or following the system) and a compact mini-player.
  The UI is Hungarian on Hungarian locales, English otherwise.
  .
  A current yt-dlp and, if no suitable node/deno is installed, deno are

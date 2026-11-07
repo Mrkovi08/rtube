@@ -9,7 +9,7 @@
 | ![Rtube](screenshots/modern.png) | ![Rtube compact view](screenshots/modern-compact.png) |
 
 YouTube search that plays audio only. A GTK4 app for Arch Linux and Ubuntu / Linux Mint with a
-clean, modern dark look and a compact mini-player.
+clean, modern look (dark, light or system theme) and a compact mini-player.
 
 > The app follows the system language (Hungarian or English). Force it with
 > `RTUBE_LANG=en` or `RTUBE_LANG=hu`, e.g. `RTUBE_LANG=en rtube`.
@@ -27,7 +27,7 @@ makepkg -si
 Or download the ready-made package from the [Releases](https://github.com/Mrkovi08/rtube/releases) page and run:
 
 ```sh
-cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.6.1/rtube-1.6.1-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.6.1-1-any.pkg.tar.zst
+cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.7.0/rtube-1.7.0-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.7.0-1-any.pkg.tar.zst
 ```
 
 pacman installs the required dependencies automatically (GTK4, GStreamer, yt-dlp...).
@@ -35,11 +35,11 @@ Optional extra: `mpv` (open the video).
 
 #### Ubuntu / Linux Mint
 
-Download `rtube_1.6.1-1_all.deb` from the [Releases](https://github.com/Mrkovi08/rtube/releases) page,
+Download `rtube_1.7.0-1_all.deb` from the [Releases](https://github.com/Mrkovi08/rtube/releases) page,
 then double-click it (Software Manager / App Center) or run:
 
 ```sh
-cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.6.1/rtube_1.6.1-1_all.deb && sudo apt install ./rtube_1.6.1-1_all.deb
+cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.7.0/rtube_1.7.0-1_all.deb && sudo apt install ./rtube_1.7.0-1_all.deb
 ```
 
 apt installs everything it needs automatically: Python GTK4 bindings, GStreamer
@@ -61,6 +61,7 @@ Start it with `rtube` or from your application menu ("Rtube"). A large "Now play
   with an "Up next" strip at the bottom (click it to play the next song). The **List** button
   brings the full view back. Rtube remembers the last view (`~/.config/rtube/state.json`).
 - Searching from the compact view switches back to the full list automatically.
+- **Theme:** the small ☾ / ☀ / ◐ button switches between Dark, Light and System (follows your desktop). Rtube remembers the choice.
 - The 🎬 (camera) button opens the video separately in **mpv**.
 - **Playback problems:** Rtube retries automatically with another YouTube method. If the song still fails, a **Repair** button appears next to the status line: it updates yt-dlp and the JS runtime, then retries the song.
 - On Hyprland floating windows Rtube also resizes the window via `hyprctl`; on other desktops
@@ -96,7 +97,7 @@ rm -rf ~/.local/share/rtube   # optional: downloaded yt-dlp / deno
 | ![Rtube](screenshots/modern.png) | ![Rtube kompakt nézet](screenshots/modern-compact.png) |
 
 YouTube kereső, ami csak a hangot játssza. GTK4 alkalmazás Arch Linuxra és Ubuntu / Linux Mintre,
-letisztult, modern sötét kinézettel és kompakt mini-lejátszóval.
+letisztult, modern kinézettel (sötét, világos vagy rendszer téma) és kompakt mini-lejátszóval.
 
 > Az alkalmazás a rendszer nyelvét követi (magyar vagy angol). Kényszeríteni a
 > `RTUBE_LANG=en` vagy `RTUBE_LANG=hu` változóval lehet, pl. `RTUBE_LANG=hu rtube`.
@@ -114,7 +115,7 @@ makepkg -si
 Vagy töltsd le a kész csomagot a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról, és:
 
 ```sh
-cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.6.1/rtube-1.6.1-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.6.1-1-any.pkg.tar.zst
+cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.7.0/rtube-1.7.0-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.7.0-1-any.pkg.tar.zst
 ```
 
 A pacman magától felrakja a szükséges függőségeket (GTK4, GStreamer, yt-dlp...).
@@ -122,11 +123,11 @@ Választható extra: `mpv` (videó megnyitása).
 
 #### Ubuntu / Linux Mint
 
-Töltsd le az `rtube_1.6.1-1_all.deb` fájlt a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról,
+Töltsd le az `rtube_1.7.0-1_all.deb` fájlt a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról,
 majd kattints rá duplán (Szoftverkezelő / App Center), vagy:
 
 ```sh
-cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.6.1/rtube_1.6.1-1_all.deb && sudo apt install ./rtube_1.6.1-1_all.deb
+cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.7.0/rtube_1.7.0-1_all.deb && sudo apt install ./rtube_1.7.0-1_all.deb
 ```
 
 Az apt magától felrak mindent, ami kell: a Python GTK4 csatolókat, a GStreamert
@@ -148,6 +149,7 @@ Indítás: `rtube` vagy az alkalmazásmenü („Rtube”). A találatok / kedven
   „Következő” sávval (rákattintva a következő szám indul). A **Lista** gomb visszahozza a teljes
   nézetet. Az Rtube megjegyzi az utolsó nézetet (`~/.config/rtube/state.json`).
 - Ha a kompakt nézetben keresel, magától visszavált a teljes listára.
+- **Téma:** a kis ☾ / ☀ / ◐ gomb vált a Sötét, Világos és Rendszer (követi az asztalt) között. Az Rtube megjegyzi a választást.
 - A 🎬 (kamera) gomb külön, **mpv**-ben nyitja meg a videót.
 - **Lejátszási hiba:** az Rtube magától újrapróbálja egy másik YouTube-módszerrel. Ha a szám még így sem szól, a státuszsor mellett megjelenik a **Javítás** gomb: frissíti a yt-dlp-t és a JS futtatókörnyezetet, majd újrapróbálja a számot.
 - Hyprlandon a lebegő ablakot `hyprctl`-lel is átméretezi; más asztali környezetben a
