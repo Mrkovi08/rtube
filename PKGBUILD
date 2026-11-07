@@ -4,16 +4,17 @@ pkgrel=1
 pkgdesc="YouTube audio-only search and player (GTK4) with a modern dark look and a compact mini-player"
 arch=('any')
 url="https://github.com/Mrkovi08/rtube"
-license=('custom')
+license=('MIT')
 depends=('python' 'python-gobject' 'gtk4' 'gdk-pixbuf2' 'librsvg' 'pango'
          'gstreamer' 'gst-plugins-base' 'gst-plugins-good' 'gst-libav' 'yt-dlp')
 optdepends=('mpv: open the video (🎬 button)'
             'deno: JavaScript runtime for YouTube extraction (otherwise fetched to ~/.local/share/rtube/bin)'
             'dms-shell: DankMaterialShell bar widget')
 install=rtube.install
-source=('rtube.py' 'rtube.sh' 'rtube.desktop'
+source=('LICENSE' 'rtube.py' 'rtube.sh' 'rtube.desktop'
         'dms-plugin.json' 'dms-Widget.qml' 'skull.svg' 'io.github.rtube.Rtube.svg')
-sha256sums=('bea7bb15887163ba161c63a8fdf23abbdb806535ad4d3f444e25c3cbbe6a8608'
+sha256sums=('6af569d9d2f0c51334014f743b147e4b25495394095208322d3f902438cdeee5'
+            'bea7bb15887163ba161c63a8fdf23abbdb806535ad4d3f444e25c3cbbe6a8608'
             'cf11ddf29d39ad512c484d0177040fd27fe408f99ec0cff4bc3be5b060e14bb1'
             'a37d8e11fe77d1c30f7fc163f78b21218c48ea272045ae231e1654181632106e'
             'b79f6269b87d79aafb49c3c0909e16824fce5e4df7639d241fabeb20c67dc90f'
@@ -22,6 +23,7 @@ sha256sums=('bea7bb15887163ba161c63a8fdf23abbdb806535ad4d3f444e25c3cbbe6a8608'
             '93cbb2b12d7e9b0018558ea2dd0d4563ba539f705b6d715e187c6ba768eb3f07')
 
 package() {
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 rtube.py "$pkgdir/usr/share/rtube/rtube.py"
   install -Dm755 rtube.sh "$pkgdir/usr/bin/rtube"
   install -Dm644 rtube.desktop "$pkgdir/usr/share/applications/rtube.desktop"

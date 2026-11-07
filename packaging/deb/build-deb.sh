@@ -27,9 +27,12 @@ Source: https://github.com/Mrkovi08/rtube
 
 Files: *
 Copyright: Mrkovi08
-License: custom
- All rights reserved by the author; see https://github.com/Mrkovi08/rtube
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files, to deal in the Software
+ without restriction. The full text is in /usr/share/doc/rtube/LICENSE.
 EOF
+install -Dm644 "$TOP/LICENSE" "$DOC/LICENSE"
 DATE=$(date -R -d "@${SOURCE_DATE_EPOCH:-$(git -C "$TOP" log -1 --format=%ct 2>/dev/null || date +%s)}")
 cat > "$WORK/changelog" <<EOF
 rtube ($VERSION-$RELEASE) noble; urgency=medium

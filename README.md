@@ -83,6 +83,10 @@ sudo apt remove rtube     # Ubuntu / Linux Mint
 rm -rf ~/.local/share/rtube   # optional: downloaded yt-dlp / deno
 ```
 
+### License
+
+[MIT](LICENSE)
+
 ---
 
 ## Magyar
@@ -163,3 +167,7 @@ sudo pacman -R rtube      # Arch
 sudo apt remove rtube     # Ubuntu / Linux Mint
 rm -rf ~/.local/share/rtube   # opcionális: a letöltött yt-dlp / deno
 ```
+
+### Licenc
+
+[MIT](LICENSE)
