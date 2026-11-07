@@ -1,5 +1,5 @@
 pkgname=rtube
-pkgver=1.6.0
+pkgver=1.6.1
 pkgrel=1
 pkgdesc="YouTube audio-only search and player (GTK4) with a modern dark look and a compact mini-player"
 arch=('any')
@@ -13,7 +13,7 @@ optdepends=('mpv: open the video (🎬 button)'
 install=rtube.install
 source=('rtube.py' 'rtube.sh' 'rtube.desktop'
         'dms-plugin.json' 'dms-Widget.qml' 'skull.svg' 'io.github.rtube.Rtube.svg')
-sha256sums=('3f16b5d75236b6d8afb1c301bd3dfbf32ffc217ac54de4a32708a78f42035a55'
+sha256sums=('bea7bb15887163ba161c63a8fdf23abbdb806535ad4d3f444e25c3cbbe6a8608'
             'cf11ddf29d39ad512c484d0177040fd27fe408f99ec0cff4bc3be5b060e14bb1'
             'a37d8e11fe77d1c30f7fc163f78b21218c48ea272045ae231e1654181632106e'
             'b79f6269b87d79aafb49c3c0909e16824fce5e4df7639d241fabeb20c67dc90f'

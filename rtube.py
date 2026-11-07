@@ -202,6 +202,14 @@ def tr(text, lang=None, **kwargs):
 # Belső jelzés időtúllépésre (friendly_error fordítja le)
 TIMEOUT_MSG = "Lejárt a várakozás."
 
+# YouTube-kliens próbák sorrendben. A web_embedded URL-je azonnal használható; az alapértelmezett
+# kliensek (pl. tv_samsung) URL-je kb. 5 mp-ig még 403-at ad, ezért ott várunk is.
+CLIENT_ATTEMPTS = [
+    ["--extractor-args", "youtube:player_client=web_embedded"],
+    [],
+]
+AD_GATE_WAIT = 6
+
 
 def rgba(hex_color, alpha):
     h = hex_color.lstrip("#")[:6]
@@ -849,6 +857,34 @@ def ensure_tools(status=lambda _msg: None, allow_download=True):
     return TOOLS
 
 
+def repair_tools(status=lambda _msg: None):
+    """„Javítás” gomb: yt-dlp gyorsítótár törlése, friss yt-dlp és JS futtatókörnyezet."""
+    with _TOOLS_LOCK:
+        TOOLS["busy"] = True
+        try:
+            old = ytdlp_bin()
+            if old.is_file():
+                try:
+                    subprocess.run([str(old), "--rm-cache-dir"], capture_output=True, timeout=30)
+                except (OSError, subprocess.SubprocessError):
+                    pass
+            status(tr("yt-dlp frissítése…"))
+            try:
+                path = _fetch_ytdlp()
+                ver = _tool_version(path)
+                status(tr("yt-dlp kész: {version}", version=ver or "?"))
+            except Exception:
+                status(tr("A letöltés nem sikerült: {name}", name="yt-dlp"))
+                path, ver = select_ytdlp(status, False)
+            if path is not None:
+                TOOLS["ytdlp"] = path
+            TOOLS["ytdlp_version"] = ver
+            TOOLS["js"] = select_js(ver, status, True)
+            return path is not None
+        finally:
+            TOOLS["busy"] = False
+
+
 def stop_proc(proc):
     if proc is None or proc.poll() is not None:
         return
@@ -1104,6 +1140,7 @@ class Rtube(Gtk.Application):
         self.last_results = []
         self.current = None
         self.stream_url = None
+        self.attempt = 0
         self.at_end = False
         self.fav_items = self._load_favs()
         self.fav_ids = {item["id"] for item in self.fav_items}
@@ -1362,8 +1399,24 @@ class Rtube(Gtk.Application):
         card.append(self.np_title)
         card.append(seek_row)
         card.append(controls)
+        self.repair_btn = self._icon_button(
+            "view-refresh-symbolic", T("Javítás", "Repair"), ["np-head-btn"]
+        )
+        self.repair_btn.set_tooltip_text(
+            T(
+                "Frissíti a yt-dlp-t és a JS futtatókörnyezetet, majd újrapróbálja a számot",
+                "Updates yt-dlp and the JS runtime, then retries the song",
+            )
+        )
+        self.repair_btn.set_valign(Gtk.Align.END)
+        self.repair_btn.set_margin_top(12)
+        self.repair_btn.set_visible(False)
+        self.repair_btn.connect("clicked", self.on_repair)
+        status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        status_row.append(self.status)
+        status_row.append(self.repair_btn)
         card.append(filler)
-        card.append(self.status)
+        card.append(status_row)
 
         # Kompakt nézet: „Következő” sáv a kártya alatt
         self.upnext = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -1788,13 +1841,16 @@ class Rtube(Gtk.Application):
         self.dur_label.set_text(fmt_time(self.current.get("duration")))
         self.play_gen += 1
         gen = self.play_gen
-        self.pool.submit(self._resolve_worker, self.current["id"], gen)
+        self.attempt = 0
+        self.repair_btn.set_visible(False)
+        self.pool.submit(self._resolve_worker, self.current["id"], gen, 0)
 
-    def _resolve_worker(self, video_id, gen):
+    def _resolve_worker(self, video_id, gen, attempt=0):
         out, err, code = run_cmd(
             [
                 str(ytdlp_bin()),
                 *ytdlp_extra_args(),
+                *CLIENT_ATTEMPTS[attempt],
                 "-f",
                 AUDIO_FORMAT,
                 "-g",
@@ -1810,15 +1866,30 @@ class Rtube(Gtk.Application):
         url = next((line.strip() for line in out.splitlines() if line.startswith("http")), "")
         if code is not None and code < 0 and not (err or "").strip():
             return
-        message = None if code == 0 and url else friendly_error(err)
-        GLib.idle_add(self._apply_stream, gen, url, message)
+        failed = not (code == 0 and url)
+        if failed and attempt + 1 < len(CLIENT_ATTEMPTS):
+            if gen == self.play_gen and not self.closing:
+                self._resolve_worker(video_id, gen, attempt + 1)
+            return
+        if not failed and not CLIENT_ATTEMPTS[attempt]:
+            time.sleep(AD_GATE_WAIT)  # az alapértelmezett kliens URL-je még pár mp-ig 403
+            if gen != self.play_gen or self.closing:
+                return
+        message = friendly_error(err) if failed else None
+        GLib.idle_add(self._apply_stream, gen, url, message, attempt)
 
-    def _apply_stream(self, gen, url, message):
+    def _apply_stream(self, gen, url, message, attempt=0):
         if self.closing or gen != self.play_gen:
             return False
         if message or not url:
             self.set_status(message or tr("Nincs hangfolyam."))
+            unfixable = (
+                tr("A videó nem elérhető."),
+                tr("Ehhez a videóhoz nincs lejátszható hang."),
+            )
+            self.repair_btn.set_visible(message not in unfixable)
             return False
+        self.attempt = attempt
         self.stream_url = url
         self.player.set_volume(self.vol.get_value())
         self.player.load(url)
@@ -1852,8 +1923,39 @@ class Rtube(Gtk.Application):
         if self.closing:
             return
         self._set_play_icon(False)
+        if self.current and self.attempt + 1 < len(CLIENT_ATTEMPTS):
+            self.attempt += 1
+            self.set_status(T("Újrapróbálás másik módszerrel…", "Retrying another way…"))
+            self.pool.submit(self._resolve_worker, self.current["id"], self.play_gen, self.attempt)
+            return
         self.status.set_tooltip_text(message or "")
         self.set_status(tr("Lejátszás sikertelen."))
+        self.repair_btn.set_visible(True)
+
+    def on_repair(self, *_args):
+        self.repair_btn.set_sensitive(False)
+        self.set_status(T("Javítás…", "Repairing…"))
+
+        def work():
+            ok = repair_tools(lambda msg: GLib.idle_add(self._tool_status, msg))
+            GLib.idle_add(self._after_repair, ok)
+
+        self.pool.submit(work)
+
+    def _after_repair(self, ok):
+        if self.closing:
+            return False
+        self.repair_btn.set_sensitive(True)
+        self.repair_btn.set_visible(False)
+        if ok and self.current:
+            self.play(self.current)
+        else:
+            self.set_status(
+                T("Kész.", "Done.") if ok else T("A javítás nem sikerült.", "Repair failed.")
+            )
+            if not ok:
+                self.repair_btn.set_visible(True)
+        return False
 
     def on_eos(self):
         if self.closing:

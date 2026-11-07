@@ -2,7 +2,7 @@
 # Build the Ubuntu / Linux Mint package: packaging/deb/build-deb.sh [outdir]
 # Needs only dpkg-deb (no root: --root-owner-group). Output: rtube_<ver>-<rel>_all.deb
 set -eu
-VERSION=1.6.0
+VERSION=1.6.1
 RELEASE=1
 TOP=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=${1:-$TOP/dist}
@@ -34,8 +34,9 @@ DATE=$(date -R -d "@${SOURCE_DATE_EPOCH:-$(git -C "$TOP" log -1 --format=%ct 2>/
 cat > "$WORK/changelog" <<EOF
 rtube ($VERSION-$RELEASE) noble; urgency=medium
 
-  * The modern look (dark, with a compact mini-player) is now the only
-    look; the glass and Winamp skins and the cava visualizer were removed.
+  * Playback failures (HTTP 403 from YouTube) are retried automatically with
+    another YouTube client; a "Repair" button updates yt-dlp and the JS
+    runtime and retries the song.
 
  -- Mrkovi08 <Mrkovi08@users.noreply.github.com>  $DATE
 EOF
