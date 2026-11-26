@@ -2,7 +2,7 @@
 # Build the Ubuntu / Linux Mint package: packaging/deb/build-deb.sh [outdir]
 # Needs only dpkg-deb (no root: --root-owner-group). Output: rtube_<ver>-<rel>_all.deb
 set -eu
-VERSION=1.7.0
+VERSION=1.8.0
 RELEASE=1
 TOP=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=${1:-$TOP/dist}

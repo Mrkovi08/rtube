@@ -4,8 +4,10 @@ They need PyGObject (GTK4 / GStreamer typelibs), like the app itself, but no dis
 no network and no yt-dlp: external commands are replaced with fakes.
 """
 import importlib.util
+import json
 import os
 import sys
+import tempfile
 import threading
 import types
 import unittest
@@ -58,6 +60,46 @@ class FriendlyError(unittest.TestCase):
 
     def test_empty_error(self):
         self.assertEqual(rt.friendly_error(""), rt.tr("Ismeretlen hiba."))
+
+
+class Radio(unittest.TestCase):
+    def test_only_http_urls(self):
+        self.assertTrue(rt.is_http_url("https://example.org/live"))
+        for bad in ("file:///etc/passwd", "ftp://x/y", "retro", "", None):
+            self.assertFalse(rt.is_http_url(bad))
+
+    def test_parse_stations(self):
+        stations = rt.parse_stations([
+            None,
+            {"name": "bad", "url": "file:///x"},
+            {"name": " Retro ", "url_resolved": "http://a/s", "stationuuid": "u1",
+             "codec": "MP3", "bitrate": 128, "countrycode": "HU", "favicon": "file:///i"},
+            {"name": "same stream", "url": "http://a/s"},
+        ])
+        self.assertEqual(len(stations), 1)
+        self.assertEqual(stations[0]["id"], "radio:u1")
+        self.assertEqual(stations[0]["title"], "Retro")
+        self.assertEqual(stations[0]["channel"], "HU · MP3 · 128 kbps")
+        self.assertEqual(stations[0]["thumb"], "")
+
+    def test_params(self):
+        self.assertEqual(rt.radio_params("", "hu")["countrycode"], "HU")
+        self.assertNotIn("countrycode", rt.radio_params("", "en"))
+        self.assertNotIn("countrycode", rt.radio_params("jazz", "hu"))
+
+    def test_playlists(self):
+        self.assertEqual(rt.parse_playlist("[playlist]\nFile1=http://a/s\n"), "http://a/s")
+        self.assertEqual(rt.parse_playlist("#EXTM3U\n#EXTINF:-1,x\nhttps://b/s\n"), "https://b/s")
+        self.assertIsNone(rt.parse_playlist("#EXTM3U\n#EXT-X-VERSION:3\nhttp://a/seg.ts\n"))
+        self.assertEqual(rt.resolve_stream("http://a/live"), "http://a/live")
+
+    def test_favorites_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "radio.json"
+            self.assertEqual(rt.load_stations(path), [])
+            station = rt.make_station("http://a/s", "A", uid="u1")
+            path.write_text(json.dumps([station, {"url": "file:///x"}]))
+            self.assertEqual(rt.load_stations(path), [station])
 
 
 class ParseTracks(unittest.TestCase):

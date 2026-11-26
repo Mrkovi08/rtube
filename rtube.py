@@ -15,6 +15,7 @@ import threading
 import time
 import zipfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -39,6 +40,7 @@ OLD_CONF = HOME / ".config/hangzo"
 CACHE = HOME / ".cache/rtube/thumbs"
 FAV_PATH = CONF / "favorites.json"
 STATE_PATH = CONF / "state.json"
+RADIO_PATH = CONF / "radio.json"  # kedvenc rádióadók (a YouTube kedvencektől külön)
 SETTINGS_PATH = HOME / ".config/DankMaterialShell/settings.json"
 # Felhasználói eszközök (friss yt-dlp, deno), ha a rendszeré hiányzik/régi (pl. Ubuntu/Mint)
 DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
@@ -1064,6 +1066,146 @@ def square_texture(path, size):
     return Gdk.Texture.new_from_bytes(GLib.Bytes.new(data))
 
 
+# ---- INTERNETRÁDIÓ (radio-browser.info közösségi adatbázis, kulcs nélkül) ----
+RADIO_SERVERS = ("de1", "de2", "fi1")
+RADIO_UA = "Rtube (https://github.com/Mrkovi08/rtube)"
+
+
+def is_http_url(url):
+    """Csak http/https jöhet szóba: külső adatból nem nyitunk file:// és egyéb címet."""
+    try:
+        parts = urllib.parse.urlsplit(url or "")
+    except (ValueError, AttributeError, TypeError):
+        return False
+    return parts.scheme.lower() in ("http", "https") and bool(parts.netloc)
+
+
+def make_station(url, name="", info="", logo="", uid=""):
+    key = uid or hashlib.sha1(url.encode()).hexdigest()
+    return {
+        "id": f"radio:{key}",
+        "radio": True,
+        "url": url,
+        "title": (name or "").strip() or urllib.parse.urlsplit(url).netloc,
+        "channel": info or T("Internetrádió", "Internet radio"),
+        "thumb": logo if is_http_url(logo) else "",
+        "duration": None,
+    }
+
+
+def parse_stations(payload):
+    stations, seen = [], set()
+    for entry in payload if isinstance(payload, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        url = entry.get("url_resolved") or entry.get("url")
+        if not is_http_url(url) or url in seen:
+            continue
+        seen.add(url)
+        codec = entry.get("codec") or ""
+        info = " · ".join(
+            part
+            for part in (
+                entry.get("countrycode") or "",
+                "" if codec == "UNKNOWN" else codec,
+                f"{entry['bitrate']} kbps" if entry.get("bitrate") else "",
+            )
+            if part
+        )
+        stations.append(
+            make_station(url, entry.get("name"), info, entry.get("favicon"), entry.get("stationuuid"))
+        )
+    return stations
+
+
+def radio_params(query="", lang=None):
+    """Üres keresésnél a népszerű adók (magyar felületen a magyarországiak)."""
+    params = {"hidebroken": "true", "order": "clickcount", "reverse": "true", "limit": "40"}
+    if query:
+        params["name"] = query
+    elif (lang or LANG) == "hu":
+        params["countrycode"] = "HU"
+    return params
+
+
+def search_stations(query=""):
+    """Állomáslista; ha egyik szerver sem válaszol, az utolsó hibát dobja tovább."""
+    path = "/json/stations/search?" + urllib.parse.urlencode(radio_params(query))
+    error = OSError("radio-browser")
+    for server in RADIO_SERVERS:
+        try:
+            req = urllib.request.Request(
+                f"https://{server}.api.radio-browser.info{path}", headers={"User-Agent": RADIO_UA}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return parse_stations(json.loads(resp.read(3_000_000)))
+        except (OSError, ValueError) as exc:
+            error = exc
+    raise error
+
+
+def parse_playlist(text):
+    """Az első stream cím egy .pls / .m3u fájlból. HLS listánál None (azt a lejátszó kezeli)."""
+    if "#EXT-X-" in text:
+        return None
+    for line in text.splitlines():
+        line = line.strip()
+        if re.match(r"(?i)file\d+=", line):
+            line = line.split("=", 1)[1].strip()
+        if is_http_url(line):
+            return line
+    return None
+
+
+def resolve_stream(url):
+    if not urllib.parse.urlsplit(url).path.lower().endswith((".pls", ".m3u")):
+        return url
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": RADIO_UA})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            text = resp.read(65_536).decode("utf-8", "replace")
+    except (OSError, ValueError):
+        return url
+    return parse_playlist(text) or url
+
+
+def fetch_logo(url):
+    """Adó logója a cache-be; None, ha nincs vagy nem tölthető le."""
+    if not is_http_url(url):
+        return None
+    CACHE.mkdir(parents=True, exist_ok=True)
+    dest = CACHE / f"radio-{hashlib.sha1(url.encode()).hexdigest()}.img"
+    if dest.exists() and dest.stat().st_size > 100:
+        return dest
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = resp.read(1_000_000)
+        if len(data) <= 100:
+            return None
+        tmp = dest.with_suffix(".part")
+        tmp.write_bytes(data)
+        tmp.replace(dest)
+    except (OSError, ValueError):
+        return None
+    return dest
+
+
+def load_stations(path):
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return []
+    return [
+        make_station(
+            e["url"], e.get("title"), e.get("channel"), e.get("thumb"),
+            str(e.get("id") or "").removeprefix("radio:"),
+        )
+        for e in (data if isinstance(data, list) else [])
+        if isinstance(e, dict) and is_http_url(e.get("url"))
+    ]
+
+
 class BoundScroll(Gtk.ScrolledWindow):
     """A lista ne nője túl az ablakot: a sorok görgethetők maradnak."""
 
@@ -1083,12 +1225,13 @@ class BoundScroll(Gtk.ScrolledWindow):
 
 
 class Player:
-    def __init__(self, on_phase, on_error, on_eos, on_buffer):
+    def __init__(self, on_phase, on_error, on_eos, on_buffer, on_title=None):
         Gst.init(None)
         self.on_phase = on_phase
         self.on_error = on_error
         self.on_eos = on_eos
         self.on_buffer = on_buffer
+        self.on_title = on_title
         self.phase = "idle"
         self.playbin = Gst.ElementFactory.make("playbin", "rtube")
         if self.playbin is None:
@@ -1116,6 +1259,11 @@ class Player:
 
     def pause(self):
         self.playbin.set_state(Gst.State.PAUSED)
+
+    def stop(self):
+        """Élő adásnál a szünet leállítás: újraindításkor az aktuális adás szól."""
+        self.playbin.set_state(Gst.State.NULL)
+        self.phase = "idle"
 
     def seek(self, seconds):
         self.playbin.seek_simple(
@@ -1151,6 +1299,10 @@ class Player:
         elif kind == Gst.MessageType.EOS:
             self.phase = "ended"
             self.on_eos()
+        elif kind == Gst.MessageType.TAG and self.on_title:
+            ok, title = msg.parse_tag().get_string(Gst.TAG_TITLE)
+            if ok and title and title.strip():
+                self.on_title(title.strip())
         elif kind == Gst.MessageType.BUFFERING:
             self.on_buffer(msg.parse_buffering())
         elif kind == Gst.MessageType.STATE_CHANGED and msg.src == self.playbin:
@@ -1206,14 +1358,22 @@ class Rtube(Gtk.Application):
         self.attempt = 0
         self.at_end = False
         self.fav_items = self._load_favs()
-        self.fav_ids = {item["id"] for item in self.fav_items}
+        self.radio_favs = load_stations(RADIO_PATH)
+        self.fav_ids = {item["id"] for item in self.fav_items + self.radio_favs}
+        self.radio_results = []
+        self.radio_gen = 0
+        self.radio_loaded = False  # a népszerű adók listája megvan-e
+        self.queries = {"results": "", "radio": ""}
+        self.logo_pool = ThreadPoolExecutor(max_workers=4)  # lassú logók ne tartsák fel a lejátszást
         self.volume = self._load_volume()
         self._search_src = 0
         self._seek_src = 0
         self._scrub = False
         self._ui = False
         self._build()
-        self.player = Player(self.on_phase, self.on_error, self.on_eos, self.on_buffer)
+        self.player = Player(
+            self.on_phase, self.on_error, self.on_eos, self.on_buffer, self.on_stream_title
+        )
         self.player.set_volume(self.volume)
         GLib.timeout_add(250, self.tick)
         self.win.present()
@@ -1369,11 +1529,14 @@ class Rtube(Gtk.Application):
         self.results_btn = self._icon_button(
             "view-list-symbolic", T("Találatok", "Results"), ["active-view"]
         )
-        self.results_btn.connect("clicked", lambda *_a: self.mode == "favs" and self.on_favs())
+        self.results_btn.connect("clicked", lambda *_a: self.show_mode("results"))
+        self.radio_btn = self._icon_button("audio-input-microphone-symbolic", T("Rádió", "Radio"), [])
+        self.radio_btn.connect("clicked", lambda *_a: self.show_mode("radio"))
         heart_icon = "rtube-heart-outline-symbolic" if self.heart_icons else "non-starred-symbolic"
         self.fav_btn = self._icon_button(heart_icon, T("Kedvencek", "Favorites"), [])
-        self.fav_btn.connect("clicked", lambda *_a: self.mode != "favs" and self.on_favs())
+        self.fav_btn.connect("clicked", lambda *_a: self.show_mode("favs"))
         seg.append(self.results_btn)
+        seg.append(self.radio_btn)
         seg.append(self.fav_btn)
         self.compact_btn = Gtk.Button()
         self.compact_btn.set_icon_name(
@@ -1751,14 +1914,23 @@ class Rtube(Gtk.Application):
             button.remove_css_class("fav")
 
     def _sync_seg(self):
-        favs = self.mode == "favs"
-        if favs:
-            self.results_btn.remove_css_class("active-view")
-            self.fav_btn.add_css_class("active-view")
-        else:
-            self.results_btn.add_css_class("active-view")
-            self.fav_btn.remove_css_class("active-view")
-        self.list_title.set_text(T("Kedvencek", "Favorites") if favs else T("Találatok", "Results"))
+        for mode, btn in (("results", self.results_btn), ("radio", self.radio_btn), ("favs", self.fav_btn)):
+            if mode == self.mode:
+                btn.add_css_class("active-view")
+            else:
+                btn.remove_css_class("active-view")
+        self.list_title.set_text(
+            {
+                "results": T("Találatok", "Results"),
+                "radio": T("Rádió", "Radio"),
+                "favs": T("Kedvencek", "Favorites"),
+            }[self.mode]
+        )
+        self.entry.set_placeholder_text(
+            T("Adó neve vagy stream cím…", "Station name or stream URL…")
+            if self.mode == "radio"
+            else T("Keresés a YouTube-on…", "Search YouTube…")
+        )
 
     def _sync_vol_icon(self, value):
         if value <= 0:
@@ -1796,6 +1968,8 @@ class Rtube(Gtk.Application):
         self.status.set_text(text)
 
     def search_later(self, *_args):
+        if self._ui:
+            return
         if self._search_src:
             GLib.source_remove(self._search_src)
         self._search_src = GLib.timeout_add(450, self._fire_search)
@@ -1810,6 +1984,9 @@ class Rtube(Gtk.Application):
             GLib.source_remove(self._search_src)
             self._search_src = 0
         query = self.entry.get_text().strip()
+        if self.mode == "radio":
+            self.search_radio(query)
+            return False
         if len(query) < 2:
             return False
         if TOOLS["busy"] and TOOLS["ytdlp"] is None:
@@ -1819,7 +1996,6 @@ class Rtube(Gtk.Application):
             self.set_status(tr("Hiányzik a yt-dlp."))
             return False
         self.mode = "results"
-        self.fav_btn.remove_css_class("active-view")
         self._sync_seg()
         self.gen += 1
         gen = self.gen
@@ -1859,6 +2035,8 @@ class Rtube(Gtk.Application):
         if self.closing or gen != self.gen:
             return False
         self.last_results = tracks
+        if self.mode != "results":  # közben fület váltottak
+            return False
         if message and not tracks:
             self.render(tracks, tr("A keresés nem sikerült."))
             self.set_status(message)
@@ -1867,17 +2045,68 @@ class Rtube(Gtk.Application):
             self.set_status(tr("Nincs találat.") if not tracks else tr("{n} találat", n=len(tracks)))
         return False
 
-    def on_favs(self, *_args):
-        if self.mode == "favs":
-            self.mode = "results"
-            self.fav_btn.remove_css_class("active-view")
-            self.render(self.last_results, tr("Keress egy számra."))
-            self._sync_seg()
+    def show_mode(self, mode):
+        if mode == self.mode:
             return
-        self.mode = "favs"
-        self.fav_btn.add_css_class("active-view")
-        self.render(self.fav_items, tr("Még nincs kedvenc. A szív menti a számot."))
+        if self._search_src:
+            GLib.source_remove(self._search_src)
+            self._search_src = 0
+        # a YouTube és a rádió keresőszövege külön marad
+        if self.mode in self.queries:
+            self.queries[self.mode] = self.entry.get_text()
+        self.mode = mode
+        if mode in self.queries:
+            self._ui = True
+            self.entry.set_text(self.queries[mode])
+            self._ui = False
         self._sync_seg()
+        if mode == "favs":
+            self._render_favs()
+        elif mode == "results":
+            self.render(self.last_results, tr("Keress egy számra."))
+        elif self.radio_loaded or len(self.entry.get_text().strip()) >= 2:
+            self.render(self.radio_results, T("Nincs ilyen adó.", "No such station."))
+        else:
+            self.search_radio("")
+
+    def _render_favs(self):
+        self.render(
+            self.radio_favs + self.fav_items,
+            T("Még nincs kedvenc. A szív menti a számot vagy az adót.",
+              "No favorites yet. Tap the heart to save a song or station."),
+        )
+
+    def search_radio(self, query):
+        self.radio_gen += 1
+        self.radio_loaded = False
+        if is_http_url(query):  # saját adás stream címmel
+            self._apply_radio_search(self.radio_gen, [make_station(query)], None)
+            return
+        if len(query) == 1:
+            return
+        self.radio_results = []
+        self.render([], T("Adók betöltése…", "Loading stations…"))
+        self.pool.submit(self._radio_search_worker, query, self.radio_gen)
+
+    def _radio_search_worker(self, query, gen):
+        stations, message = [], None
+        try:
+            stations = search_stations(query)
+        except (OSError, ValueError):
+            message = T("Az adólista nem érhető el.", "The station list is unavailable.")
+        GLib.idle_add(self._apply_radio_search, gen, stations, message, not query)
+
+    def _apply_radio_search(self, gen, stations, message, popular=False):
+        if self.closing or gen != self.radio_gen:
+            return False
+        self.radio_results = stations
+        self.radio_loaded = popular and message is None
+        if self.mode != "radio":
+            return False
+        self.render(stations, message or T("Nincs ilyen adó.", "No such station."))
+        if message:
+            self.set_status(message)
+        return False
 
     def render(self, tracks, empty_text):
         while (row := self.list.get_row_at_index(0)) is not None:
@@ -1889,9 +2118,17 @@ class Rtube(Gtk.Application):
             for track in tracks:
                 self.list.append(self.make_row(track))
             self.stack.set_visible_child_name("list")
-        self.list_count.set_text(
-            T(f"{len(tracks)} szám", f"{len(tracks)} songs") if tracks else ""
-        )
+        count = len(tracks)
+        radios = sum(1 for t in tracks if t.get("radio"))
+        if not count:
+            label = ""
+        elif radios == count:
+            label = T(f"{count} adó", f"{count} stations")
+        elif radios:
+            label = T(f"{count} tétel", f"{count} items")
+        else:
+            label = T(f"{count} szám", f"{count} songs")
+        self.list_count.set_text(label)
         self.mark_playing()
 
     def make_row(self, track):
@@ -1907,7 +2144,7 @@ class Rtube(Gtk.Application):
         title.add_css_class("title")
         title.set_hexpand(True)
         title.set_ellipsize(Pango.EllipsizeMode.END)
-        sub = Gtk.Label(label=track.get("channel") or "YouTube", xalign=0)
+        sub = Gtk.Label(label=self._np_subtitle(track), xalign=0)
         sub.add_css_class("dim")
         sub.set_hexpand(True)
         sub.set_ellipsize(Pango.EllipsizeMode.END)
@@ -1921,7 +2158,8 @@ class Rtube(Gtk.Application):
         row.heart = heart
         box.append(frame)
         box.append(texts)
-        dur = Gtk.Label(label=fmt_time(track.get("duration")), xalign=1)
+        live = T("ÉLŐ", "LIVE")
+        dur = Gtk.Label(label=live if track.get("radio") else fmt_time(track.get("duration")), xalign=1)
         dur.add_css_class("time")
         box.append(dur)
         box.append(heart)
@@ -1933,11 +2171,16 @@ class Rtube(Gtk.Application):
 
     def queue_thumb(self, track, picture):
         video_id = track["id"]
+        radio = track.get("radio")
+        if radio or str(getattr(picture, "thumb_id", "")).startswith("radio:"):
+            picture.set_paintable(None)  # ne maradjon az előző borító
         picture.thumb_id = video_id
         size = picture.thumb_size
 
         def work():
-            path = fetch_thumb(video_id, track.get("thumb"))
+            path = (
+                fetch_logo(track.get("thumb")) if radio else fetch_thumb(video_id, track.get("thumb"))
+            )
 
             def apply():
                 if self.closing or getattr(picture, "thumb_id", None) != video_id:
@@ -1954,9 +2197,70 @@ class Rtube(Gtk.Application):
 
             GLib.idle_add(apply)
 
-        self.pool.submit(work)
+        (self.logo_pool if radio else self.pool).submit(work)
+
+    def _set_live(self, live):
+        """Élő adásnál nincs tekerés és videó."""
+        self._ui = True
+        self.scale.set_range(0, 1)
+        self.scale.set_value(0)
+        self._ui = False
+        self.scale.set_sensitive(not live)
+        self.scale.set_opacity(0 if live else 1)
+        self.pos_label.set_text("0:00")
+        if live:
+            self.dur_label.set_text(T("● ÉLŐ", "● LIVE"))
+
+    def play_radio(self, station):
+        self.current = dict(station)
+        self.at_end = False
+        self.stream_url = None
+        self.attempt = 0
+        self.play_gen += 1
+        gen = self.play_gen
+        self.player.stop()
+        self._set_play_icon(False)
+        self.play_btn.set_sensitive(True)
+        self.video_btn.set_sensitive(False)
+        self.repair_btn.set_visible(False)
+        self.status.set_tooltip_text("")
+        self.np_sub.set_text(self._np_subtitle(station))
+        self.np_title.set_text(station["title"])
+        self._set_live(True)
+        self.queue_thumb(self.current, self.np_pic)
+        self.sync_hearts()
+        self.mark_playing()
+        self.set_status(T("Kapcsolódás az adóhoz…", "Connecting to the station…"))
+        self.pool.submit(self._radio_worker, station["url"], gen)
+
+    def _radio_worker(self, url, gen):
+        GLib.idle_add(self._apply_radio_stream, gen, resolve_stream(url))
+
+    def _apply_radio_stream(self, gen, url):
+        if self.closing or gen != self.play_gen:
+            return False
+        self.stream_url = url
+        self.player.set_volume(self.vol.get_value())
+        self.player.load(url)
+        return False
+
+    def on_stream_title(self, title):
+        """Az adó által küldött számcím: felül az adó neve, alatta a szám."""
+        if self.closing or not (self.current and self.current.get("radio")):
+            return
+        self.np_sub.set_text(self.current["title"])
+        self.np_title.set_text(title)
+        self.np_title.set_tooltip_text(title)
 
     def play(self, track):
+        self.np_title.set_tooltip_text(None)
+        if track.get("radio"):
+            self.play_radio(track)
+            return
+        self._set_live(False)
+        if self.current and self.current.get("radio"):
+            self.player.stop()  # az adás ne szóljon tovább, amíg a szám betöltődik
+            self._set_play_icon(False)
         if TOOLS["busy"] and TOOLS["ytdlp"] is None:
             self.set_status(tr("A yt-dlp még töltődik…"))
             return
@@ -2044,6 +2348,15 @@ class Rtube(Gtk.Application):
     def on_play(self, *_args):
         if self.current is None:
             return
+        if self.current.get("radio"):
+            if self.player.phase in ("playing", "paused"):
+                self.player.stop()
+                self.play_gen += 1
+                self._set_play_icon(False)
+                self.set_status(tr("Szünet"))
+            else:
+                self.play(self.current)
+            return
         if self.at_end and self.stream_url:
             self.at_end = False
             self.player.set_volume(self.vol.get_value())
@@ -2069,6 +2382,10 @@ class Rtube(Gtk.Application):
         if self.closing:
             return
         self._set_play_icon(False)
+        if self.current and self.current.get("radio"):
+            self.status.set_tooltip_text(message or "")
+            self.set_status(T("Az adás nem elérhető.", "The station is unavailable."))
+            return
         if self.current and self.attempt + 1 < len(CLIENT_ATTEMPTS):
             self.attempt += 1
             self.set_status(T("Újrapróbálás másik módszerrel…", "Retrying another way…"))
@@ -2108,6 +2425,10 @@ class Rtube(Gtk.Application):
             return
         self.at_end = True
         self._set_play_icon(False)
+        if self.current and self.current.get("radio"):
+            self.player.stop()
+            self.set_status(T("Az adás megszakadt.", "The stream was interrupted."))
+            return
         self.set_status(tr("Vége"))
 
     def on_buffer(self, percent):
@@ -2144,7 +2465,7 @@ class Rtube(Gtk.Application):
 
     # ---- KÖZVETLEN MPV MEGHÍVÁS ----
     def on_video(self, *_args):
-        if self.current is None:
+        if self.current is None or self.current.get("radio"):
             return
         
         video_id = self.current["id"]
@@ -2179,6 +2500,9 @@ class Rtube(Gtk.Application):
         if self._scrub or self.player.phase not in ("playing", "paused", "ended"):
             return True
         pos, dur = self.player.times()
+        if self.current and self.current.get("radio"):
+            self.pos_label.set_text(fmt_time(pos))
+            return True
         shown = self.current.get("duration") if self.current else None
         if dur <= 0 and shown:
             dur = shown
@@ -2192,7 +2516,23 @@ class Rtube(Gtk.Application):
             self.dur_label.set_text(fmt_time(dur))
         return True
 
+    def toggle_radio_fav(self, station):
+        uid = station["id"]
+        if uid in self.fav_ids:
+            self.radio_favs = [item for item in self.radio_favs if item["id"] != uid]
+            self.fav_ids.discard(uid)
+        else:
+            self.radio_favs.insert(0, dict(station))
+            self.fav_ids.add(uid)
+        self._save_json(RADIO_PATH, self.radio_favs)
+        if self.mode == "favs":
+            self._render_favs()
+        self.sync_hearts()
+
     def toggle_fav(self, track):
+        if track.get("radio"):
+            self.toggle_radio_fav(track)
+            return
         video_id = track["id"]
         if video_id in self.fav_ids:
             self.fav_items = [item for item in self.fav_items if item["id"] != video_id]
@@ -2210,7 +2550,7 @@ class Rtube(Gtk.Application):
             self.fav_ids.add(video_id)
         self._save_favs()
         if self.mode == "favs":
-            self.render(self.fav_items, tr("Még nincs kedvenc. A szív menti a számot."))
+            self._render_favs()
         self.sync_hearts()
 
     def on_np_heart(self, *_args):
@@ -2258,10 +2598,13 @@ class Rtube(Gtk.Application):
         return items
 
     def _save_favs(self):
+        self._save_json(FAV_PATH, self.fav_items)
+
+    def _save_json(self, path, items):
         CONF.mkdir(parents=True, exist_ok=True)
-        tmp = FAV_PATH.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(self.fav_items, ensure_ascii=False, indent=2))
-        tmp.replace(FAV_PATH)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(items, ensure_ascii=False, indent=2))
+        tmp.replace(path)
 
     def _load_volume(self):
         try:
@@ -2295,6 +2638,7 @@ class Rtube(Gtk.Application):
         except Exception:
             pass
         self.pool.shutdown(wait=False, cancel_futures=True)
+        self.logo_pool.shutdown(wait=False, cancel_futures=True)
         return False
 
 
