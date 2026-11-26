@@ -63,6 +63,7 @@ Start it with `rtube` or from your application menu ("Rtube"). A large "Now play
 - Searching from the compact view switches back to the full list automatically.
 - **Theme:** the small ☾ / ☀ / ◐ button switches between Dark, Light and System (follows your desktop). Rtube remembers the choice.
 - The 🎬 (camera) button opens the video separately in **mpv**.
+- **Internet radio** (1.8.0): the **Radio** tab lists popular stations (from [radio-browser.info](https://www.radio-browser.info)); search by name, or paste an `http(s)://` stream address. The heart saves a station (`~/.config/rtube/radio.json`); saved stations appear under Favorites.
 - **Playback problems:** Rtube retries automatically with another YouTube method. If the song still fails, a **Repair** button appears next to the status line: it updates yt-dlp and the JS runtime, then retries the song.
 - On Hyprland floating windows Rtube also resizes the window via `hyprctl`; on other desktops
   the normal GTK window sizing is used.
@@ -151,6 +152,7 @@ Indítás: `rtube` vagy az alkalmazásmenü („Rtube”). A találatok / kedven
 - Ha a kompakt nézetben keresel, magától visszavált a teljes listára.
 - **Téma:** a kis ☾ / ☀ / ◐ gomb vált a Sötét, Világos és Rendszer (követi az asztalt) között. Az Rtube megjegyzi a választást.
 - A 🎬 (kamera) gomb külön, **mpv**-ben nyitja meg a videót.
+- **Internetrádió** (1.8.0): a **Rádió** fül a népszerű adókat mutatja (a [radio-browser.info](https://www.radio-browser.info) adatbázisból); név szerint kereshetsz, vagy beilleszthetsz egy `http(s)://` stream címet. A szív elmenti az adót (`~/.config/rtube/radio.json`), a mentett adók a Kedvencek között jelennek meg.
 - **Lejátszási hiba:** az Rtube magától újrapróbálja egy másik YouTube-módszerrel. Ha a szám még így sem szól, a státuszsor mellett megjelenik a **Javítás** gomb: frissíti a yt-dlp-t és a JS futtatókörnyezetet, majd újrapróbálja a számot.
 - Hyprlandon a lebegő ablakot `hyprctl`-lel is átméretezi; más asztali környezetben a
   szokásos GTK ablakméretezés működik.
