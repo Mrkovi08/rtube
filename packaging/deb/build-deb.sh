@@ -37,8 +37,8 @@ DATE=$(date -R -d "@${SOURCE_DATE_EPOCH:-$(git -C "$TOP" log -1 --format=%ct 2>/
 cat > "$WORK/changelog" <<EOF
 rtube ($VERSION-$RELEASE) noble; urgency=medium
 
-  * New dark / light / system theme button (the choice is remembered).
-  * Add the MIT license and unit tests.
+  * Internet radio: Radio tab (radio-browser.info), station search, custom
+    stream addresses and saved stations.
 
  -- Mrkovi08 <Mrkovi08@users.noreply.github.com>  $DATE
 EOF

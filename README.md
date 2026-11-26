@@ -27,7 +27,7 @@ makepkg -si
 Or download the ready-made package from the [Releases](https://github.com/Mrkovi08/rtube/releases) page and run:
 
 ```sh
-cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.7.0/rtube-1.7.0-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.7.0-1-any.pkg.tar.zst
+cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.8.0/rtube-1.8.0-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.8.0-1-any.pkg.tar.zst
 ```
 
 pacman installs the required dependencies automatically (GTK4, GStreamer, yt-dlp...).
@@ -35,11 +35,11 @@ Optional extra: `mpv` (open the video).
 
 #### Ubuntu / Linux Mint
 
-Download `rtube_1.7.0-1_all.deb` from the [Releases](https://github.com/Mrkovi08/rtube/releases) page,
+Download `rtube_1.8.0-1_all.deb` from the [Releases](https://github.com/Mrkovi08/rtube/releases) page,
 then double-click it (Software Manager / App Center) or run:
 
 ```sh
-cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.7.0/rtube_1.7.0-1_all.deb && sudo apt install ./rtube_1.7.0-1_all.deb
+cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.8.0/rtube_1.8.0-1_all.deb && sudo apt install ./rtube_1.8.0-1_all.deb
 ```
 
 apt installs everything it needs automatically: Python GTK4 bindings, GStreamer
@@ -116,7 +116,7 @@ makepkg -si
 Vagy töltsd le a kész csomagot a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról, és:
 
 ```sh
-cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.7.0/rtube-1.7.0-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.7.0-1-any.pkg.tar.zst
+cd /tmp && curl -LO https://github.com/Mrkovi08/rtube/releases/download/v1.8.0/rtube-1.8.0-1-any.pkg.tar.zst && sudo pacman -U ./rtube-1.8.0-1-any.pkg.tar.zst
 ```
 
 A pacman magától felrakja a szükséges függőségeket (GTK4, GStreamer, yt-dlp...).
@@ -124,11 +124,11 @@ Választható extra: `mpv` (videó megnyitása).
 
 #### Ubuntu / Linux Mint
 
-Töltsd le az `rtube_1.7.0-1_all.deb` fájlt a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról,
+Töltsd le az `rtube_1.8.0-1_all.deb` fájlt a [Releases](https://github.com/Mrkovi08/rtube/releases) oldalról,
 majd kattints rá duplán (Szoftverkezelő / App Center), vagy:
 
 ```sh
-cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.7.0/rtube_1.7.0-1_all.deb && sudo apt install ./rtube_1.7.0-1_all.deb
+cd /tmp && wget https://github.com/Mrkovi08/rtube/releases/download/v1.8.0/rtube_1.8.0-1_all.deb && sudo apt install ./rtube_1.8.0-1_all.deb
 ```
 
 Az apt magától felrak mindent, ami kell: a Python GTK4 csatolókat, a GStreamert
